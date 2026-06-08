@@ -3,6 +3,7 @@
 Herramienta de seguimiento de proyecto convertida en un tablero **dinámico, profesional, escalable y fácil de mantener**, respetando al 100 % la planificación original.
 
 > **Archivo entregable:** `Diagrama_de_Gantt___Proyecto_Datos_Op._Complejas_080626.xlsx`
+> **Documentación (Excel aparte):** `Guia_Diagrama_de_Gantt.xlsx`
 > **Respaldo original intacto:** `original_backup.xlsx`
 > **Generador reproducible:** `build_xlsx.py`
 
@@ -36,22 +37,27 @@ de reglas de formato condicional. Se verificó por diff que no se quitó ni alte
 - KPIs: Avance global, Tareas, Completadas, En curso, Próximas (≤7 d) y Vencidas.
 - **Avance por Módulo (OKR)** con barra de datos. *El % se recalcula de forma
   independiente y correcta* (no usa las celdas de promedio de las filas de fase).
-- **Avance por Sprint** con barra de datos.
+- **Resumen por Sprint** (Parte 2) con barra de datos: Sprint · Tareas · Pendientes ·
+  Vencidas · Próx. a vencer · Próxima entrega · % Avance. La lista es **dinámica**: solo
+  aparecen los sprints que existen y se agregan solos al usarse, conservando el histórico.
 
 ### C) Hoja **Entregas Próximas** (Parte 2)
-- **Resumen por Sprint**: tareas, pendientes, vencidas, próximas a vencer, próxima
-  entrega y % de avance, más fila TOTAL.
-- **Detalle de entregas** ordenado por Sprint y luego por Fecha de entrega, con semáforo
-  de estado. Columnas: Sprint · Entregable (Módulo) · Tarea · Responsable · Fecha de
-  entrega · Estado · Días restantes · Progreso.
-- **Umbral “Próximo a vencer”** editable (celda `I4`, por defecto 7 días).
+- Lista de **detalle de entregas** ordenada por Sprint y luego por Fecha de entrega, con
+  semáforo de estado. Columnas: Sprint · Entregable (Módulo) · Tarea · Responsable · Fecha
+  de entrega · Estado · Días restantes · Progreso.
+- La pantalla queda **inmovilizada solo en el encabezado** (6 filas) para ver ~25
+  entregas a la vez; el resto se desplaza.
+- Franja superior con totales (entregas, vencidas, próximas, avance, próxima entrega).
+  El **resumen por sprint** está en la hoja *Tablero*.
+- **Umbral “Próximo a vencer”** editable (celda `I3`, por defecto 7 días).
 
-### D) Hoja **Guía**
-Documentación dentro del propio libro: criterios, fórmulas, leyenda de colores,
-escalabilidad y observaciones detectadas.
+### D) Documentación **Guía** (archivo Excel aparte)
+`Guia_Diagrama_de_Gantt.xlsx`: criterios, fórmulas, leyenda de colores, escalabilidad y
+observaciones detectadas. Se entrega como libro independiente.
 
 ### E) Hoja **_Datos** (oculta)
-Motor de cálculo que lee el Gantt y prepara los datos. **No editar.**
+Motor de cálculo que lee el Gantt y prepara los datos (incluye el listado dinámico de
+sprints existentes). **No editar.**
 
 ---
 
@@ -82,6 +88,11 @@ Todas las fórmulas abarcan hasta la **fila 200** de la hoja Gantt. Se pueden ag
 sprints, tareas, entregables, responsables y fechas nuevos: el **Tablero** y
 **Entregas Próximas** se actualizan solos, sin tocar fórmulas. Para superar las 200 filas,
 basta con ampliar el rango en la hoja `_Datos`.
+
+**Sprints dinámicos:** la lista de sprints del *Tablero* muestra únicamente los que
+existen en los datos. Cuando una tarea pase a usar el Sprint 2, este aparecerá
+automáticamente junto al Sprint 1 (el histórico no se pierde). Las tareas sin número de
+sprint se agrupan en “(Sin sprint)”.
 
 ---
 

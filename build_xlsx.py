@@ -220,7 +220,7 @@ print("OK module loaded")
 def build_all():
     extract()
     XF, DX = build_styles()
-    UMBRAL = ENT + "!$I$4"
+    UMBRAL = ENT + "!$I$3"
     DM = "'_Datos'!"   # referencia entre comillas (máxima compatibilidad)
 
     # ---------- sheet1: añadir formato condicional (semáforo col F, escala color Sprint) ----------
@@ -264,61 +264,47 @@ def build_all():
         d.f(r,12, f'IF($C{r},$N{r}*1000000+$H{r}+ROW()/100000,"")', XF["datc"])
         d.f(r,13, f'IF($C{r},IF({SRC}!$E{r}="","(Sin sprint)",{SRC}!$E{r}),"")', XF["datc"])
         d.f(r,14, f'IF($C{r},IF({SRC}!$E{r}="",9999,{SRC}!$E{r}),"")', XF["datc"])
-    sheet8 = render_sheet(d, f"A1:N{DATA_LAST}")
-    wr("xl/worksheets/sheet8.xml", sheet8)
+    # listado dinámico de sprints: solo aparecen los que EXISTEN (P=candidato, Q=existe)
+    d.t(6,16,"CandSprint", XF["tblhdr"]); d.t(6,17,"SprintExiste", XF["tblhdr"])
+    for r in range(7,37):                     # candidatos 1..30
+        d.f(r,16, "ROW()-6", XF["datc"])
+        d.f(r,17, f'IF(COUNTIF($N$7:$N$200,$P{r})>0,$P{r},"")', XF["datc"])
+    d.n(37,16,9999, XF["datc"])               # candidato "(Sin sprint)"
+    d.f(37,17, 'IF(COUNTIF($N$7:$N$200,9999)>0,9999,"")', XF["datc"])
+    sheet7 = render_sheet(d, f"A1:Q{DATA_LAST}")
+    wr("xl/worksheets/sheet7.xml", sheet7)
 
-    # ---------- sheet6: Entregas Próximas ----------
+    # ---------- sheet6: Entregas Próximas (enfocada en el detalle) ----------
     e = Sheet()
     e.cols=('<cols><col min="1" max="1" width="2.5"/><col min="2" max="2" width="12"/>'
-            '<col min="3" max="3" width="30"/><col min="4" max="4" width="50"/>'
+            '<col min="3" max="3" width="30"/><col min="4" max="4" width="52"/>'
             '<col min="5" max="5" width="24"/><col min="6" max="6" width="14"/>'
             '<col min="7" max="7" width="18"/><col min="8" max="8" width="11"/>'
             '<col min="9" max="9" width="11"/><col min="11" max="11" width="9" hidden="1"/></cols>')
     # encabezado
     e.t(1,2,"ENTREGAS PRÓXIMAS POR SPRINT", XF["title"]); e.merge("B1","I1")
     for c in range(3,10): e.blank(1,c, XF["title"])
-    e.f(2,2,'"Proyecto Datos Op. Complejas · IHSA S.A. · Seguimiento de entregas · Actualizado al "&TEXT(TODAY(),"dd/mm/yyyy")', XF["subw"]); e.merge("B2","I2")
+    glance=('"Proyecto Datos Op. Complejas · IHSA S.A. · Hoy "&TEXT(TODAY(),"dd/mm/yyyy")'
+            f'&"   |   Entregas: "&COUNT({DM}$H$7:$H$200)'
+            f'&"   |   Vencidas: "&COUNTIF({DM}$J$7:$J$200,"Vencido")'
+            f'&"   |   Próximas: "&COUNTIF({DM}$J$7:$J$200,"Próximo a vencer")'
+            f'&"   |   Avance: "&TEXT(IFERROR(AVERAGE({DM}$I$7:$I$200),0),"0%")'
+            f'&"   |   Próxima entrega: "&IFERROR(TEXT(_xlfn.MINIFS({DM}$H$7:$H$200,{DM}$J$7:$J$200,"<>Completado"),"dd/mm/yyyy"),"-")'
+            '&"   |   Resumen por sprint → hoja Tablero"')
+    e.f(2,2, glance, XF["subw"]); e.merge("B2","I2")
     for c in range(3,10): e.blank(2,c, XF["subw"])
     # leyenda + parámetro
-    e.t(4,2,"Referencia de estados:", XF["lbl"])
-    e.t(4,3,"Vencido", XF["leg_red"]); e.t(4,4,"Próximo a vencer", XF["leg_amb"])
-    e.t(4,5,"En curso (en plazo)", XF["leg_grn"]); e.t(4,6,"Completado", XF["leg_don"])
-    e.t(4,7,"Umbral 'Próximo' (días):", XF["lbl"]); e.merge("G4","H4"); e.blank(4,8,XF["lbl"])
-    e.n(4,9,7, XF["input"])
-    # resumen por sprint
-    e.t(6,2,"RESUMEN POR SPRINT", XF["section"]); e.merge("B6","I6")
-    for c in range(3,10): e.blank(6,c, XF["section"])
-    sh=["Sprint","Tareas","Pendientes","Vencidas","Próx. a vencer","Próxima entrega","% Avance"]
-    for i,h in enumerate(sh): e.t(7,2+i,h, XF["tblhdr"])
-    e.blank(7,9, XF["tblhdr"])
-    sprint_rows=list(range(8,14))   # sprint 1..6
-    for k,rr in enumerate(sprint_rows): e.n(rr,2,k+1, XF["textc_n"])
-    e.t(14,2,"(Sin sprint)", XF["textc_n"])
-    cand=sprint_rows+[14]
-    for rr in cand:
-        b=f"$B{rr}"
-        e.f(rr,3, f'IF(COUNTIF({DM}$M$7:$M$200,{b})=0,"",COUNTIF({DM}$M$7:$M$200,{b}))', XF["textc_n"])
-        e.f(rr,4, f'IF($C{rr}="","",COUNTIFS({DM}$M$7:$M$200,{b},{DM}$J$7:$J$200,"<>Completado"))', XF["textc_n"])
-        e.f(rr,5, f'IF($C{rr}="","",COUNTIFS({DM}$M$7:$M$200,{b},{DM}$J$7:$J$200,"Vencido"))', XF["textc_n"])
-        e.f(rr,6, f'IF($C{rr}="","",COUNTIFS({DM}$M$7:$M$200,{b},{DM}$J$7:$J$200,"Próximo a vencer"))', XF["textc_n"])
-        e.f(rr,7, f'IF($C{rr}="","",IF($D{rr}=0,"—",_xlfn.MINIFS({DM}$H$7:$H$200,{DM}$M$7:$M$200,{b},{DM}$J$7:$J$200,"<>Completado")))', XF["date_n"])
-        e.f(rr,8, f'IF($C{rr}="","",IFERROR(AVERAGEIF({DM}$M$7:$M$200,{b},{DM}$I$7:$I$200),""))', XF["pct_n"])
-        e.blank(rr,9, XF["textc_n"])
-    # total
-    e.t(15,2,"TOTAL", XF["totall"])
-    e.f(15,3, f"COUNT({DM}$H$7:$H$200)", XF["total"])
-    e.f(15,4, f'COUNTIF({DM}$J$7:$J$200,"Vencido")+COUNTIF({DM}$J$7:$J$200,"Próximo a vencer")+COUNTIF({DM}$J$7:$J$200,"En curso")', XF["total"])
-    e.f(15,5, f'COUNTIF({DM}$J$7:$J$200,"Vencido")', XF["total"])
-    e.f(15,6, f'COUNTIF({DM}$J$7:$J$200,"Próximo a vencer")', XF["total"])
-    e.f(15,7, f'IF($D15=0,"—",_xlfn.MINIFS({DM}$H$7:$H$200,{DM}$J$7:$J$200,"<>Completado"))', XF["totald"])
-    e.f(15,8, f'IFERROR(AVERAGE({DM}$I$7:$I$200),"")', XF["totalp"])
-    e.blank(15,9, XF["total"])
+    e.t(3,2,"Estados:", XF["lbl"])
+    e.t(3,3,"Vencido", XF["leg_red"]); e.t(3,4,"Próximo a vencer", XF["leg_amb"])
+    e.t(3,5,"En curso (en plazo)", XF["leg_grn"]); e.t(3,6,"Completado", XF["leg_don"])
+    e.t(3,7,"Umbral 'Próximo' (días):", XF["lbl"]); e.merge("G3","H3"); e.blank(3,8,XF["lbl"])
+    e.n(3,9,7, XF["input"])
     # detalle
-    e.t(17,2,"DETALLE DE ENTREGAS  (ordenado por Sprint y luego por Fecha de entrega)", XF["section"]); e.merge("B17","I17")
-    for c in range(3,10): e.blank(17,c, XF["section"])
+    e.t(5,2,"DETALLE DE ENTREGAS  (ordenado por Sprint y luego por Fecha de entrega)", XF["section"]); e.merge("B5","I5")
+    for c in range(3,10): e.blank(5,c, XF["section"])
     dh=["Sprint","Entregable (Módulo)","Tarea","Responsable","Fecha entrega","Estado","Días rest.","Progreso"]
-    for i,h in enumerate(dh): e.t(18,2+i,h, XF["tblhdr"])
-    R0=19; NDET=80
+    for i,h in enumerate(dh): e.t(6,2+i,h, XF["tblhdr"])
+    R0=7; NDET=150
     for r in range(R0,R0+NDET):
         e.f(r,11, f'IFERROR(MATCH(SMALL({DM}$L$7:$L$200,ROW()-{R0}+1),{DM}$L$7:$L$200,0),"")', XF["datc"])  # K helper (hidden)
         k=f"$K{r}"
@@ -331,7 +317,6 @@ def build_all():
         e.f(r,8, f'IF({k}="","",INDEX({DM}$K$7:$K$200,{k}))', XF["days_n"])
         e.f(r,9, f'IF({k}="","",INDEX({DM}$I$7:$I$200,{k}))', XF["pct_n"])
     endrow=R0+NDET-1
-    f_resum  = esc('$C8<>""')
     f_band   = esc('AND($D%d<>"",MOD(ROW(),2)=0)'%R0)
     f_border = esc('$D%d<>""'%R0)
     f_venc   = esc('$G%d="Vencido"'%R0)
@@ -339,7 +324,6 @@ def build_all():
     f_curso  = esc('$G%d="En curso"'%R0)
     f_comp   = esc('$G%d="Completado"'%R0)
     cf_ent=(
-      f'<conditionalFormatting sqref="B8:I14"><cfRule type="expression" dxfId="{DX["border"]}" priority="40"><formula>{f_resum}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="B{R0}:I{endrow}">'
       f'<cfRule type="expression" dxfId="{DX["band"]}" priority="31"><formula>{f_band}</formula></cfRule>'
       f'<cfRule type="expression" dxfId="{DX["border"]}" priority="32"><formula>{f_border}</formula></cfRule>'
@@ -351,7 +335,7 @@ def build_all():
       f'<cfRule type="expression" dxfId="{DX["done"]}" priority="36"><formula>{f_comp}</formula></cfRule>'
       '</conditionalFormatting>'
     )
-    sv='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="18" topLeftCell="A19" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="B19" sqref="B19"/></sheetView></sheetViews>'
+    sv='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="B7" sqref="B7"/></sheetView></sheetViews>'
     rh={1:26,2:16}
     sheet6=render_sheet(e, f"A1:K{endrow}", cf=cf_ent, sheetviews=sv, rowheights=rh)
     wr("xl/worksheets/sheet6.xml", sheet6)
@@ -359,7 +343,8 @@ def build_all():
     # ---------- sheet5: Tablero ----------
     t=Sheet()
     t.cols=('<cols><col min="1" max="1" width="2.5"/><col min="2" max="2" width="22"/>'
-            '<col min="3" max="8" width="13"/><col min="9" max="9" width="14"/></cols>')
+            '<col min="3" max="8" width="13"/><col min="9" max="9" width="14"/>'
+            '<col min="11" max="11" width="9" hidden="1"/></cols>')
     t.t(1,2,"TABLERO EJECUTIVO — PROYECTO DATOS OP. COMPLEJAS", XF["title"]); t.merge("B1","I1")
     for c in range(3,10): t.blank(1,c, XF["title"])
     t.f(2,2,'"IHSA S.A.  ·  Responsable: "&'+SRC+'!$G$3&"  ·  Inicio: "&TEXT('+SRC+'!$K$3,"dd/mm/yyyy")&"  ·  Actualizado al "&TEXT(TODAY(),"dd/mm/yyyy")', XF["subw"]); t.merge("B2","I2")
@@ -390,76 +375,44 @@ def build_all():
         t.f(rr,7, f"COUNTIF({DM}$D$7:$D$200,$B{rr})", XF["textc"])
         t.f(rr,8, f'IFERROR(AVERAGEIF({DM}$D$7:$D$200,$B{rr},{DM}$I$7:$I$200),"")', XF["pct"])
         t.f(rr,9, f'IFERROR(AVERAGEIF({DM}$D$7:$D$200,$B{rr},{DM}$I$7:$I$200),"")', XF["pct"])
-    # sprints
+    # sprints (lista DINÁMICA: solo aparecen los sprints que existen; el histórico se conserva)
     t.t(19,2,"AVANCE POR SPRINT", XF["section"]); t.merge("B19","I19")
     for c in range(3,10): t.blank(19,c, XF["section"])
-    t.t(20,2,"Sprint", XF["tblhdr"]); t.t(20,3,"Tareas", XF["tblhdr"]); t.t(20,4,"Completadas", XF["tblhdr"])
-    t.t(20,5,"Vencidas", XF["tblhdr"]); t.t(20,6,"% Avance", XF["tblhdr"]); t.t(20,7,"Avance", XF["tblhdr"])
-    for c in (8,9): t.blank(20,c, XF["tblhdr"])
-    sp=list(range(21,27))  # sprint 1..6
-    for k,rr in enumerate(sp): t.n(rr,2,k+1, XF["textc_n"])
-    t.t(27,2,"(Sin sprint)", XF["textc_n"])
-    for rr in sp+[27]:
-        b=f"$B{rr}"
-        t.f(rr,3, f'IF(COUNTIF({DM}$M$7:$M$200,{b})=0,"",COUNTIF({DM}$M$7:$M$200,{b}))', XF["textc_n"])
-        t.f(rr,4, f'IF($C{rr}="","",COUNTIFS({DM}$M$7:$M$200,{b},{DM}$J$7:$J$200,"Completado"))', XF["textc_n"])
-        t.f(rr,5, f'IF($C{rr}="","",COUNTIFS({DM}$M$7:$M$200,{b},{DM}$J$7:$J$200,"Vencido"))', XF["textc_n"])
-        t.f(rr,6, f'IF($C{rr}="","",IFERROR(AVERAGEIF({DM}$M$7:$M$200,{b},{DM}$I$7:$I$200),""))', XF["pct_n"])
-        t.f(rr,7, f'IF($C{rr}="","",IFERROR(AVERAGEIF({DM}$M$7:$M$200,{b},{DM}$I$7:$I$200),""))', XF["pct_n"])
-        for c in (8,9): t.blank(rr,c, XF["textc_n"])
-    t.t(29,2,"Las métricas se recalculan automáticamente a partir de la hoja Gantt. El % de avance por módulo se recalcula de forma independiente (no usa las celdas de promedio de las filas de fase).", XF["note"]); t.merge("B29","I29")
+    shs=["Sprint","Tareas","Pendientes","Vencidas","Próx. a vencer","Próxima entrega","% Avance"]
+    for i,h in enumerate(shs): t.t(20,2+i,h, XF["tblhdr"])
+    SP0=21; NSP=12
+    for rr in range(SP0,SP0+NSP):
+        t.f(rr,11, f'IFERROR(SMALL({DM}$Q$7:$Q$37,ROW()-{SP0}+1),"")', XF["datc"])   # K (oculta): sprint nº
+        k=f"$K{rr}"
+        t.f(rr,2, f'IF({k}="","",IF({k}=9999,"(Sin sprint)",{k}))', XF["textc_n"])
+        t.f(rr,3, f'IF({k}="","",COUNTIF({DM}$N$7:$N$200,{k}))', XF["textc_n"])
+        t.f(rr,4, f'IF({k}="","",COUNTIFS({DM}$N$7:$N$200,{k},{DM}$J$7:$J$200,"<>Completado"))', XF["textc_n"])
+        t.f(rr,5, f'IF({k}="","",COUNTIFS({DM}$N$7:$N$200,{k},{DM}$J$7:$J$200,"Vencido"))', XF["textc_n"])
+        t.f(rr,6, f'IF({k}="","",COUNTIFS({DM}$N$7:$N$200,{k},{DM}$J$7:$J$200,"Próximo a vencer"))', XF["textc_n"])
+        t.f(rr,7, f'IF({k}="","",IF($D{rr}=0,"—",_xlfn.MINIFS({DM}$H$7:$H$200,{DM}$N$7:$N$200,{k},{DM}$J$7:$J$200,"<>Completado")))', XF["date_n"])
+        t.f(rr,8, f'IF({k}="","",IFERROR(AVERAGEIF({DM}$N$7:$N$200,{k},{DM}$I$7:$I$200),""))', XF["pct_n"])
+        t.blank(rr,9, XF["textc_n"])
+    noterow=SP0+NSP+1
+    t.t(noterow,2,"Las métricas se recalculan solas desde la hoja Gantt. Los sprints aparecen automáticamente al usarse (el histórico se conserva). El % por módulo se recalcula de forma independiente (no usa las celdas de promedio de las filas de fase).", XF["note"]); t.merge(f"B{noterow}",f"I{noterow}")
     esc_b10 = esc('$B10<>""')
-    esc_c21 = esc('$C21<>""')
+    esc_bsp = esc('$B%d<>""'%SP0)
+    spend=SP0+NSP-1
     cf_tab=(
       f'<conditionalFormatting sqref="H10:H16"><cfRule type="dataBar" priority="10"><dataBar><cfvo type="num" val="0"/><cfvo type="num" val="1"/><color rgb="FF2E75B6"/></dataBar></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="I10:I16"><cfRule type="dataBar" priority="11"><dataBar showValue="0"><cfvo type="num" val="0"/><cfvo type="num" val="1"/><color rgb="FF9DC3E6"/></dataBar></cfRule></conditionalFormatting>'
-      f'<conditionalFormatting sqref="G21:G27"><cfRule type="dataBar" priority="12"><dataBar><cfvo type="num" val="0"/><cfvo type="num" val="1"/><color rgb="FF2E75B6"/></dataBar></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="H{SP0}:H{spend}"><cfRule type="dataBar" priority="12"><dataBar><cfvo type="num" val="0"/><cfvo type="num" val="1"/><color rgb="FF2E75B6"/></dataBar></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="B10:I16"><cfRule type="expression" dxfId="{DX["border"]}" priority="13"><formula>{esc_b10}</formula></cfRule></conditionalFormatting>'
-      f'<conditionalFormatting sqref="B21:G27"><cfRule type="expression" dxfId="{DX["border"]}" priority="14"><formula>{esc_c21}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="B{SP0}:H{spend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="14"><formula>{esc_bsp}</formula></cfRule></conditionalFormatting>'
     )
     sv2='<sheetViews><sheetView showGridLines="0" workbookViewId="0"/></sheetViews>'
-    sheet5=render_sheet(t, "A1:I29", cf=cf_tab, sheetviews=sv2, rowheights={1:28,2:16,5:30,4:16})
+    sheet5=render_sheet(t, f"A1:K{noterow}", cf=cf_tab, sheetviews=sv2, rowheights={1:28,2:16,5:30,4:16})
     wr("xl/worksheets/sheet5.xml", sheet5)
 
-    # ---------- sheet7: Guía ----------
-    g=Sheet()
-    g.cols='<cols><col min="1" max="1" width="2.5"/><col min="2" max="9" width="14"/></cols>'
-    def gh(r,txt): g.t(r,2,txt, XF["guide_h"]); g.merge(f"B{r}",f"I{r}"); [g.blank(r,c,XF["guide_h"]) for c in range(3,10)]
-    def gs(r,txt): g.t(r,2,txt, XF["guide_s"]); g.merge(f"B{r}",f"I{r}"); [g.blank(r,c,XF["guide_s"]) for c in range(3,10)]
-    def gt(r,txt,h=30): g.t(r,2,txt, XF["guide_t"]); g.merge(f"B{r}",f"I{r}"); [g.blank(r,c,XF["guide_t"]) for c in range(3,10)]; rowh[r]=h
-    rowh={}
-    gh(1,"GUÍA DE USO Y DOCUMENTACIÓN DE FÓRMULAS"); rowh[1]=26
-    gt(2,"Este libro fue ampliado SIN modificar ningún dato, fecha, nombre, estado ni fórmula existente. Todas las mejoras son aditivas: formato condicional, hojas auxiliares y fórmulas nuevas.",34)
-    gs(4,"HOJAS NUEVAS")
-    gt(5,"• Tablero: resumen ejecutivo (KPIs, avance por módulo OKR y por sprint). Ideal para reuniones de seguimiento.",28)
-    gt(6,"• Entregas Próximas: lista automática de entregas ordenada por sprint y fecha (columna F), con semáforo y resumen por sprint.",28)
-    gt(7,"• _Datos (oculta): motor de cálculo. Lee la hoja Gantt y prepara los datos. No editar.",24)
-    gs(9,"CRITERIOS DE ESTADO (semáforo)")
-    gt(10,"Fecha de entrega = columna F (Fecha) si existe; si está vacía se usa la columna L (FIN) como respaldo.",26)
-    gt(11,"• Completado: Progreso ≥ 100%.   • Vencido: fecha de entrega anterior a HOY y progreso < 100%.",24)
-    gt(12,"• Próximo a vencer: faltan entre 0 y el 'umbral' de días (editable en Entregas Próximas, por defecto 7).   • En curso: dentro de plazo.",26)
-    gt(13,"Colores: Rojo = Vencido · Amarillo = Próximo a vencer · Verde = En curso/Completado.",24)
-    gs(15,"FÓRMULAS CLAVE")
-    gt(16,"• Ordenamiento sin macros: SMALL + MATCH + INDEX sobre una 'ClaveOrden' = Sprint×1.000.000 + Fecha + Fila/100.000.",26)
-    gt(17,"• Detección de tareas vs. fases: las filas de fase tienen texto en la columna INICIO (K); las tareas tienen una fecha. EsTarea = Y(hay tarea, no es fase, hay fecha).",30)
-    gt(18,"• Módulo de cada tarea: LOOKUP(2,1/(...)) localiza el último título de fase situado por encima.",24)
-    gt(19,"• Conteos y promedios: COUNTIF/COUNTIFS, MINIFS y AVERAGEIF sobre rangos amplios (filas 7 a 200) para que el libro escale solo.",28)
-    gs(21,"ESCALABILIDAD")
-    gt(22,"Todas las fórmulas abarcan hasta la fila 200 de la hoja Gantt. Puede agregar sprints, tareas, entregables, responsables y fechas: el Tablero y Entregas Próximas se actualizan solos. Para más de 200 filas, amplíe el rango en la hoja _Datos.",36)
-    gs(24,"OBSERVACIONES DETECTADAS (no se modificaron datos; se informan para su revisión)")
-    gt(25,"• Promedios de fase: las celdas J27 y J36 (filas de fase 4 y 5) promedian rangos que no corresponden a sus tareas. El Tablero recalcula el avance por módulo de forma independiente y correcta. Si desea corregir el origen: J27 → =PROMEDIO(J28:J35) ; J36 → =PROMEDIO(J37:J47).",40)
-    gt(26,"• Fechas a revisar (posibles errores de carga, no modificadas): K13 = 19/11/2026 (posterior a su FIN), K40 = 01/12/2026 y filas con INICIO mayor que FIN (41, 42, 46, 47), que generan DÍAS negativos.",36)
-    gt(27,"• Filas 79-80 contienen textos sueltos sin fecha; quedan excluidos de los cálculos automáticamente.",26)
-    sv3='<sheetViews><sheetView showGridLines="0" workbookViewId="0"/></sheetViews>'
-    sheet7=render_sheet(g, "A1:I27", sheetviews=sv3, rowheights=rowh)
-    wr("xl/worksheets/sheet7.xml", sheet7)
-
-    # ---------- plumbing: workbook.xml ----------
+    # ---------- plumbing: workbook.xml (3 hojas nuevas: Tablero, Entregas, _Datos) ----------
     wb=rd("xl/workbook.xml")
     new_sheets=('<sheet name="Tablero" sheetId="15" r:id="rId12"/>'
                 '<sheet name="Entregas Próximas" sheetId="16" r:id="rId13"/>'
-                '<sheet name="Guía" sheetId="17" r:id="rId14"/>'
-                '<sheet name="_Datos" sheetId="18" state="hidden" r:id="rId15"/>')
+                '<sheet name="_Datos" sheetId="18" state="hidden" r:id="rId14"/>')
     wb=wb.replace("</sheets>", new_sheets+"</sheets>",1)
     wb=wb.replace('<calcPr calcId="191029" iterate="1"/>', '<calcPr calcId="191029" iterate="1" fullCalcOnLoad="1"/>',1)
     wr("xl/workbook.xml", wb)
@@ -469,15 +422,14 @@ def build_all():
     rels=re.sub(r'<Relationship Id="rId8" Type="[^"]*calcChain"[^>]*/>','',rels)
     add=('<Relationship Id="rId12" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet5.xml"/>'
          '<Relationship Id="rId13" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet6.xml"/>'
-         '<Relationship Id="rId14" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet7.xml"/>'
-         '<Relationship Id="rId15" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet8.xml"/>')
+         '<Relationship Id="rId14" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet7.xml"/>')
     rels=rels.replace("</Relationships>", add+"</Relationships>",1)
     wr("xl/_rels/workbook.xml.rels", rels)
 
-    # [Content_Types].xml: quitar calcChain, añadir sheets 5-8
+    # [Content_Types].xml: quitar calcChain, añadir sheets 5-7
     ct=rd("[Content_Types].xml")
     ct=re.sub(r'<Override PartName="/xl/calcChain.xml"[^>]*/>','',ct)
-    ov="".join(f'<Override PartName="/xl/worksheets/sheet{n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for n in (5,6,7,8))
+    ov="".join(f'<Override PartName="/xl/worksheets/sheet{n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for n in (5,6,7))
     ct=ct.replace("</Types>", ov+"</Types>",1)
     wr("[Content_Types].xml", ct)
 
@@ -495,5 +447,61 @@ def build_all():
                 z.write(fp,arc)
     print("WROTE", OUT, os.path.getsize(OUT),"bytes")
 
+# ============================================================
+GUIA_OUT = "/home/user/Gantt_Op.Complejas/Guia_Diagrama_de_Gantt.xlsx"
+def build_guia():
+    """Documentación en un Excel APARTE (archivo nuevo e independiente)."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    wb=openpyxl.Workbook(); ws=wb.active; ws.title="Guía"
+    ws.sheet_view.showGridLines=False
+    ws.column_dimensions['A'].width=2.5
+    for c in "BCDEFGHI": ws.column_dimensions[c].width=14
+    NAVY="FF1F3A52"; BAND="FFEAF1F8"
+    f_h=Font(bold=True,size=14,color="FFFFFFFF",name="Calibri")
+    f_s=Font(bold=True,size=12,color=NAVY,name="Calibri")
+    f_t=Font(size=11,color=NAVY,name="Calibri")
+    fill_h=PatternFill("solid",fgColor=NAVY); fill_s=PatternFill("solid",fgColor=BAND)
+    al=Alignment(horizontal="left",vertical="center",wrap_text=True)
+    r=[1]
+    def put(txt,kind,h=None):
+        row=r[0]
+        ws.merge_cells(start_row=row,start_column=2,end_row=row,end_column=9)
+        cell=ws.cell(row=row,column=2,value=txt); cell.alignment=al
+        if kind=="h": cell.font=f_h; [setattr(ws.cell(row=row,column=c),'fill',fill_h) for c in range(2,10)]
+        elif kind=="s": cell.font=f_s; [setattr(ws.cell(row=row,column=c),'fill',fill_s) for c in range(2,10)]
+        else: cell.font=f_t
+        if h: ws.row_dimensions[row].height=h
+        r[0]+=1
+    def gap(): r[0]+=1
+    put("GUÍA DE USO Y DOCUMENTACIÓN — Diagrama de Gantt Proyecto Datos Op. Complejas","h",26); gap()
+    put("Este libro de Gantt fue ampliado SIN modificar ningún dato, fecha, nombre, estado ni fórmula existente. Todas las mejoras son aditivas (formato condicional, hojas auxiliares y fórmulas).","t",34); gap()
+    put("HOJAS DEL LIBRO","s")
+    put("• Proyecto Datos (OKR´s): es la hoja Gantt original. Se le agregó SOLO formato condicional: semáforo de vencimiento en la columna F y escala de color por sprint en la columna E.","t",34)
+    put("• Tablero: resumen ejecutivo (KPIs, avance por módulo OKR y avance por sprint). Aquí está el resumen por sprint.","t",28)
+    put("• Entregas Próximas: lista automática de entregas, ordenada por sprint y luego por fecha (columna F), con semáforo de estado. La pantalla está inmovilizada solo en el encabezado para ver muchas filas.","t",34)
+    put("• _Datos (oculta): motor de cálculo. Lee la hoja Gantt y prepara los datos. No editar.","t",24); gap()
+    put("CRITERIOS DE ESTADO (semáforo)","s")
+    put("Fecha de entrega = columna F (Fecha) si existe; si está vacía se usa la columna L (FIN) como respaldo.","t",24)
+    put("• Completado: Progreso ≥ 100%.   • Vencido: fecha de entrega anterior a HOY y progreso < 100%.","t",22)
+    put("• Próximo a vencer: faltan entre 0 y el 'umbral' de días (editable en Entregas Próximas, por defecto 7).   • En curso: dentro de plazo.","t",24)
+    put("Colores: Rojo = Vencido · Amarillo = Próximo a vencer · Verde = En curso/Completado.","t",22); gap()
+    put("FÓRMULAS CLAVE","s")
+    put("• Ordenamiento sin macros: SMALL + MATCH + INDEX sobre una 'ClaveOrden' = Sprint×1.000.000 + Fecha + Fila/100.000.","t",24)
+    put("• Tareas vs. fases: las filas de fase tienen TEXTO en la columna INICIO (K); las tareas tienen una FECHA. EsTarea = Y(hay tarea; no es fase; hay fecha).","t",28)
+    put("• Módulo de cada tarea: LOOKUP(2;1/(...)) localiza el último título de fase situado por encima.","t",24)
+    put("• Sprints dinámicos: la lista de sprints (Tablero) muestra SOLO los que existen; aparecen automáticamente al usarse y el histórico se conserva. '(Sin sprint)' agrupa las tareas sin número.","t",30)
+    put("• Métricas: COUNTIF/COUNTIFS, MINIFS y AVERAGEIF sobre rangos amplios (filas 7 a 200).","t",24); gap()
+    put("ESCALABILIDAD","s")
+    put("Todas las fórmulas abarcan hasta la fila 200 de la hoja Gantt. Se pueden agregar sprints, tareas, entregables, responsables y fechas: el Tablero y Entregas Próximas se actualizan solos. Para superar 200 filas, amplíe el rango en la hoja _Datos.","t",36); gap()
+    put("OBSERVACIONES DETECTADAS (no se modificaron datos; se informan para revisión)","s")
+    put("• Promedios de fase: las celdas J27 y J36 (fases 4 y 5) promedian rangos que no corresponden a sus tareas (muestran 38% y 17% cuando el avance real es 72% y 43%). El Tablero ya recalcula el avance por módulo de forma correcta. Para corregir el origen: J27 → =PROMEDIO(J28:J35) ; J36 → =PROMEDIO(J37:J47).","t",46)
+    put("• Fechas a revisar (posibles errores de carga, no modificadas): K13 = 19/11/2026 (posterior a su FIN), K40 = 01/12/2026 y filas con INICIO mayor que FIN (41, 42, 46, 47), que generan DÍAS negativos.","t",34)
+    put("• Filas 79-80 contienen textos sueltos sin fecha; quedan excluidos de los cálculos automáticamente.","t",24)
+    if os.path.exists(GUIA_OUT): os.remove(GUIA_OUT)
+    wb.save(GUIA_OUT)
+    print("WROTE", GUIA_OUT, os.path.getsize(GUIA_OUT),"bytes")
+
 if __name__=="__main__":
     build_all()
+    build_guia()
