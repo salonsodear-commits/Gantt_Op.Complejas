@@ -317,22 +317,22 @@ def build_all():
         e.f(r,8, f'IF({k}="","",INDEX({DM}$K$7:$K$200,{k}))', XF["days_n"])
         e.f(r,9, f'IF({k}="","",INDEX({DM}$I$7:$I$200,{k}))', XF["pct_n"])
     endrow=R0+NDET-1
-    f_band   = esc('AND($D%d<>"",MOD(ROW(),2)=0)'%R0)
     f_border = esc('$D%d<>""'%R0)
     f_venc   = esc('$G%d="Vencido"'%R0)
     f_prox   = esc('$G%d="Próximo a vencer"'%R0)
     f_curso  = esc('$G%d="En curso"'%R0)
     f_comp   = esc('$G%d="Completado"'%R0)
+    # Semáforo con prioridad ALTA (21-24) para que SIEMPRE gane sobre el borde;
+    # sin banda cebra para evitar el "ruido" de filas alternadas.
     cf_ent=(
-      f'<conditionalFormatting sqref="B{R0}:I{endrow}">'
-      f'<cfRule type="expression" dxfId="{DX["band"]}" priority="31"><formula>{f_band}</formula></cfRule>'
-      f'<cfRule type="expression" dxfId="{DX["border"]}" priority="32"><formula>{f_border}</formula></cfRule>'
-      '</conditionalFormatting>'
       f'<conditionalFormatting sqref="G{R0}:H{endrow}">'
-      f'<cfRule type="expression" dxfId="{DX["red"]}" priority="33"><formula>{f_venc}</formula></cfRule>'
-      f'<cfRule type="expression" dxfId="{DX["amber"]}" priority="34"><formula>{f_prox}</formula></cfRule>'
-      f'<cfRule type="expression" dxfId="{DX["green"]}" priority="35"><formula>{f_curso}</formula></cfRule>'
-      f'<cfRule type="expression" dxfId="{DX["done"]}" priority="36"><formula>{f_comp}</formula></cfRule>'
+      f'<cfRule type="expression" dxfId="{DX["red"]}" priority="21"><formula>{f_venc}</formula></cfRule>'
+      f'<cfRule type="expression" dxfId="{DX["amber"]}" priority="22"><formula>{f_prox}</formula></cfRule>'
+      f'<cfRule type="expression" dxfId="{DX["green"]}" priority="23"><formula>{f_curso}</formula></cfRule>'
+      f'<cfRule type="expression" dxfId="{DX["done"]}" priority="24"><formula>{f_comp}</formula></cfRule>'
+      '</conditionalFormatting>'
+      f'<conditionalFormatting sqref="B{R0}:I{endrow}">'
+      f'<cfRule type="expression" dxfId="{DX["border"]}" priority="40"><formula>{f_border}</formula></cfRule>'
       '</conditionalFormatting>'
     )
     sv='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="B7" sqref="B7"/></sheetView></sheetViews>'
