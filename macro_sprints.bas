@@ -93,6 +93,43 @@ Private Sub LogRow(lg As Worksheet, id As String, tarea As String, _
     lg.Cells(nr, 7).Value = motivo
 End Sub
 
+' ============================================================================
+'  BOTÓN "POSTERGAR TAREA"  (1 clic, con selección de motivo)
+'  Posterga 1 sprint la tarea de la fila seleccionada y registra el motivo.
+'  Sólo rellena las celdas de la hoja "Postergar"; las fórmulas hacen el resto
+'  (Sprint vigente se recalcula y el movimiento aparece en "Historial de Sprints").
+'  Para crear el botón: Insertar > (Controles de formulario) Botón ->
+'  asignar la macro "PostergarTareaActual".
+' ============================================================================
+Public Sub PostergarTareaActual()
+    Dim wb As Workbook: Set wb = ThisWorkbook
+    Dim pg As Worksheet: Set pg = wb.Worksheets("Postergar")
+    Dim r As Long: r = ActiveCell.Row
+    If r < ROW_FIRST Or r > ROW_LAST Then
+        MsgBox "Seleccione la fila de una tarea (filas " & ROW_FIRST & " a " & ROW_LAST & ").", vbExclamation
+        Exit Sub
+    End If
+    Dim motivos As Variant
+    motivos = Array("Dependencia bloqueada", "Sobrecarga del responsable", _
+        "Falta de información / insumos", "Reestimación / mayor alcance", _
+        "Recurso no disponible", "Prioridad reasignada", "Bloqueo técnico", "Otro")
+    Dim msg As String, i As Integer
+    For i = LBound(motivos) To UBound(motivos)
+        msg = msg & (i + 1) & ") " & motivos(i) & vbCrLf
+    Next i
+    Dim opt As String
+    opt = InputBox("Motivo del cuello de botella (1-" & (UBound(motivos) + 1) & "):" & vbCrLf & msg, _
+                   "Postergar tarea al próximo sprint")
+    If opt = "" Then Exit Sub
+    Dim idx As Integer: idx = Val(opt)
+    Dim motivo As String
+    If idx >= 1 And idx <= UBound(motivos) + 1 Then motivo = motivos(idx - 1) Else motivo = opt
+    pg.Range("F" & r).Value = Nz(pg.Range("F" & r).Value) + 1   ' +1 sprint
+    pg.Range("G" & r).Value = motivo
+    MsgBox "Tarea (fila " & r & ") postergada 1 sprint. Motivo: " & motivo & _
+           vbCrLf & "Vea el detalle en 'Historial de Sprints'.", vbInformation, "Sprints"
+End Sub
+
 ' --- Para ejecución automática al abrir: pegue esto en el objeto "ThisWorkbook" ---
 ' Private Sub Workbook_Open()
 '     ReasignarSprints

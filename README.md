@@ -174,6 +174,19 @@ Una tarea no completada cuyo sprint ya cerró pasa **automáticamente** al sprin
 fórmula, se recalcula sola). El **Sprint planificado original (col E del Gantt) no se
 modifica** → queda como histórico. El `Tablero` agrupa por *Sprint vigente*.
 
+**Postergar manualmente por cuello de botella — hoja `Postergar`:** en la fila de cada
+tarea hay dos listas desplegables:
+- **Postergar (nº sprints)** → `0,1,2,3` (1 = próximo sprint).
+- **Motivo del cuello de botella** → lista editable: *Dependencia bloqueada · Sobrecarga del
+  responsable · Falta de información/insumos · Reestimación/mayor alcance · Recurso no
+  disponible · Prioridad reasignada · Bloqueo técnico · Otro*.
+
+`Sprint vigente = MÁX(planificado; Sprint actual) + Postergar`. Al elegir las opciones, el
+sprint vigente se recalcula solo y el movimiento se registra en `Historial de Sprints` con
+ese motivo. **Botón de 1 clic (opcional):** la macro `PostergarTareaActual` de
+`macro_sprints.bas` rellena esas celdas automáticamente — basta insertar un *Botón de
+formulario* y asignarle la macro (requiere `.xlsm`).
+
 ## 4) Trazabilidad — hoja "Historial de Sprints"
 Registra cada reasignación con: **ID, Tarea, Responsable, Sprint origen, Sprint destino,
 Fecha del movimiento** (cierre del sprint origen) **y Motivo**. Se completa solo con las

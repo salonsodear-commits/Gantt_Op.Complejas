@@ -164,6 +164,7 @@ def build_styles():
     adddxf("amber",  '<dxf><font><b/><color rgb="FF7F6000"/></font><fill><patternFill><bgColor rgb="FFFFD966"/></patternFill></fill></dxf>')
     adddxf("green",  '<dxf><font><color rgb="FF274E13"/></font><fill><patternFill><bgColor rgb="FFD9EAD3"/></patternFill></fill></dxf>')
     adddxf("done",   '<dxf><font><b/><color rgb="FFFFFFFF"/></font><fill><patternFill><bgColor rgb="FF38761D"/></patternFill></fill></dxf>')
+    adddxf("inputhl",'<dxf><fill><patternFill><bgColor rgb="FFFFF2CC"/></patternFill></fill></dxf>')
     dxf_xml="".join(dxfs)
     s = re.sub(r'(<dxfs count=")(\d+)(")', lambda m: f'{m.group(1)}{int(m.group(2))+len(dxfs)}{m.group(3)}', s, count=1)
     s = s.replace("</dxfs>", dxf_xml+"</dxfs>", 1)
@@ -189,7 +190,7 @@ def col_letter(c):
     return s
 def cr(r,c): return f"{col_letter(c)}{r}"
 
-def render_sheet(sh, dimension, cf="", sheetviews="", extra_after_data="", rowheights=None):
+def render_sheet(sh, dimension, cf="", sheetviews="", extra_after_data="", rowheights=None, dv=""):
     rowheights=rowheights or {}
     body=[]
     for r in sorted(sh.rows):
@@ -210,7 +211,7 @@ def render_sheet(sh, dimension, cf="", sheetviews="", extra_after_data="", rowhe
             '<sheetFormatPr defaultRowHeight="15"/>'
             f'{cols}'
             f'<sheetData>{sd}</sheetData>'
-            f'{merge_xml}{cf}'
+            f'{merge_xml}{cf}{dv}'
             '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>'
             f'{extra_after_data}'
             '</worksheet>')
@@ -225,6 +226,7 @@ def build_all():
     DM = "'_Datos'!"   # referencia entre comillas (máxima compatibilidad)
     HS = "'Historial de Sprints'!"      # hoja de configuración + auditoría de sprints
     INI, DUR, SACT = HS+"$C$5", HS+"$C$6", HS+"$C$7"   # inicio Sprint1 / duración / sprint actual
+    PST = "'Postergar'!"                # panel de postergación manual por cuello de botella
 
     # ---------- sheet1: añadir formato condicional (semáforo col F, escala color Sprint) ----------
     s1 = rd("xl/worksheets/sheet1.xml")
@@ -290,11 +292,11 @@ def build_all():
         d.f(r,27, f'IF($C{r},ROUND(100*(0.35*$AK{r}+0.3*$AL{r}+0.2*$AM{r}+0.15*MEDIAN(0,($Y{r}-4)/8,1)),0),"")', XF["datc"])  # Score
         d.f(r,28, f'IF($C{r},IF($J{r}="Completado","—",IF($AA{r}>=70,"Crítica",IF($AA{r}>=45,"Alta",IF($AA{r}>=25,"Media","Baja")))),"")', XF["dattxt"])  # Prioridad
         d.f(r,29, f'IF($C{r},IF(LEN(TRIM($AN{r}))=0,"—",TRIM($AN{r})),"")', XF["dattxt"])   # Alertas
-        d.f(r,30, f'IF($C{r},IF($N{r}=9999,9999,IF($J{r}="Completado",$N{r},MAX($N{r},{SACT}))),"")', XF["datc"])  # SprVigente
+        d.f(r,30, f'IF($C{r},IF($N{r}=9999,9999,IF($J{r}="Completado",$N{r},MAX($N{r},{SACT})+N({PST}$F{r}))),"")', XF["datc"])  # SprVigente (+ postergación manual)
         d.f(r,31, f'IF($C{r},IF($AD{r}=9999,"(Sin sprint)",$AD{r}),"")', XF["datc"])        # SprVigKey
         d.f(r,32, f'IF($C{r},AND($N{r}<>9999,$AD{r}<>$N{r}),FALSE)', XF["datc"])            # Movido?
         d.f(r,33, f'IF($AF{r},{INI}+$N{r}*{DUR}-1,"")', XF["datc"])                          # FechaMov (cierre sprint origen)
-        d.f(r,34, f'IF($AF{r},"No completada al cierre del Sprint "&$N{r}&" -> reasignada al Sprint "&$AD{r},"")', XF["dattxt"])  # Motivo
+        d.f(r,34, f'IF($AF{r},IF({PST}$G{r}<>"",{PST}$G{r},"No completada al cierre del Sprint "&$N{r})&" -> Sprint "&$AD{r},"")', XF["dattxt"])  # Motivo (manual o automático)
         d.f(r,35, f'IF($AF{r},$N{r}*100000+ROW(),"")', XF["datc"])                           # ClaveAud
         d.f(r,36, f'IF($C{r},$AA{r}*1000000-MEDIAN(-9999,$K{r},9999)*100+(300-ROW()),"")', XF["datc"])  # ClavePri
         d.f(r,37, f'IF($C{r},IF($J{r}="Completado",0,IF($K{r}<0,1,IF($K{r}<=3,0.9,IF($K{r}<=7,0.7,IF($K{r}<=14,0.45,0.2))))),"")', XF["datc"])  # urg
@@ -493,10 +495,53 @@ def build_all():
     sheet8=render_sheet(h, f"A1:J{hend}", cf=cf_h, sheetviews=sv4, rowheights={1:26,2:16})
     wr("xl/worksheets/sheet8.xml", sheet8)
 
-    # ---------- plumbing: workbook.xml (4 hojas nuevas) ----------
+    # ---------- sheet9: Postergar (acción por cuello de botella) ----------
+    pg=Sheet()
+    pg.cols=('<cols><col min="1" max="1" width="2.5"/><col min="2" max="2" width="9"/>'
+             '<col min="3" max="3" width="46"/><col min="4" max="5" width="14"/>'
+             '<col min="6" max="6" width="17"/><col min="7" max="7" width="30"/>'
+             '<col min="9" max="9" width="32"/></cols>')
+    pg.t(1,2,"POSTERGAR TAREAS  (acción por cuello de botella)", XF["title"]); pg.merge("B1","G1")
+    for c in range(3,8): pg.blank(1,c, XF["title"])
+    pg.t(2,2,"En la fila de la tarea, elija cuántos sprints postergar y el motivo. El cambio se aplica solo (Sprint vigente) y queda registrado en 'Historial de Sprints'. 1 = próximo sprint.", XF["subw"]); pg.merge("B2","G2")
+    for c in range(3,8): pg.blank(2,c, XF["subw"])
+    # lista de motivos (editable) -> fuente de la validación
+    pg.t(4,9,"Motivos de cuello de botella (editable)", XF["tblhdrl"])
+    motivos=["Dependencia bloqueada","Sobrecarga del responsable","Falta de información / insumos",
+             "Reestimación / mayor alcance","Recurso no disponible","Prioridad reasignada",
+             "Bloqueo técnico","Otro"]
+    for i,m in enumerate(motivos): pg.t(5+i,9,m, XF["textl_n"])
+    pg.t(4,2,"ACCIÓN — POSTERGAR TAREA A PRÓXIMO SPRINT", XF["section"]); pg.merge("B4","G4")
+    for c in range(3,8): pg.blank(4,c, XF["section"])
+    ph=["ID","Tarea","Sprint plan.","Sprint vigente","Postergar (nº sprints)","Motivo del cuello de botella"]
+    for i,c in enumerate(ph): pg.t(6,2+i,c, XF["tblhdr"])
+    PR0=7
+    for r in range(PR0, DATA_LAST+1):
+        pg.f(r,2, f'IF({DM}$C{r},{DM}$O{r},"")', XF["textc_n"])
+        pg.f(r,3, f'IF({DM}$C{r},{DM}$F{r},"")', XF["textl_n"])
+        pg.f(r,4, f'IF({DM}$C{r},IF({DM}$N{r}=9999,"(Sin sprint)",{DM}$N{r}),"")', XF["textc_n"])
+        pg.f(r,5, f'IF({DM}$C{r},{DM}$AE{r},"")', XF["textc_n"])
+        pg.blank(r,6, XF["textc_n"])   # F: input postergar (nº sprints)
+        pg.blank(r,7, XF["textl_n"])   # G: input motivo
+    pend=DATA_LAST
+    f_pb=esc('$B7<>""')
+    cf_pg=(
+      f'<conditionalFormatting sqref="F{PR0}:G{pend}"><cfRule type="expression" dxfId="{DX["inputhl"]}" priority="9"><formula>{f_pb}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="B{PR0}:G{pend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="10"><formula>{f_pb}</formula></cfRule></conditionalFormatting>'
+    )
+    dv_pg=(f'<dataValidations count="2">'
+           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="F{PR0}:F{pend}"><formula1>"0,1,2,3"</formula1></dataValidation>'
+           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="G{PR0}:G{pend}"><formula1>$I$5:$I$12</formula1></dataValidation>'
+           f'</dataValidations>')
+    svp='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="F7" sqref="F7"/></sheetView></sheetViews>'
+    sheet9=render_sheet(pg, f"A1:I{pend}", cf=cf_pg, sheetviews=svp, rowheights={1:26,2:16}, dv=dv_pg)
+    wr("xl/worksheets/sheet9.xml", sheet9)
+
+    # ---------- plumbing: workbook.xml (5 hojas nuevas) ----------
     wb=rd("xl/workbook.xml")
     new_sheets=('<sheet name="Tablero" sheetId="15" r:id="rId12"/>'
                 '<sheet name="Entregas Próximas" sheetId="16" r:id="rId13"/>'
+                '<sheet name="Postergar" sheetId="20" r:id="rId16"/>'
                 '<sheet name="Historial de Sprints" sheetId="19" r:id="rId15"/>'
                 '<sheet name="_Datos" sheetId="18" state="hidden" r:id="rId14"/>')
     wb=wb.replace("</sheets>", new_sheets+"</sheets>",1)
@@ -509,14 +554,15 @@ def build_all():
     add=('<Relationship Id="rId12" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet5.xml"/>'
          '<Relationship Id="rId13" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet6.xml"/>'
          '<Relationship Id="rId14" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet7.xml"/>'
-         '<Relationship Id="rId15" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet8.xml"/>')
+         '<Relationship Id="rId15" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet8.xml"/>'
+         '<Relationship Id="rId16" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet9.xml"/>')
     rels=rels.replace("</Relationships>", add+"</Relationships>",1)
     wr("xl/_rels/workbook.xml.rels", rels)
 
-    # [Content_Types].xml: quitar calcChain, añadir sheets 5-8
+    # [Content_Types].xml: quitar calcChain, añadir sheets 5-9
     ct=rd("[Content_Types].xml")
     ct=re.sub(r'<Override PartName="/xl/calcChain.xml"[^>]*/>','',ct)
-    ov="".join(f'<Override PartName="/xl/worksheets/sheet{n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for n in (5,6,7,8))
+    ov="".join(f'<Override PartName="/xl/worksheets/sheet{n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for n in (5,6,7,8,9))
     ct=ct.replace("</Types>", ov+"</Types>",1)
     wr("[Content_Types].xml", ct)
 
@@ -577,7 +623,8 @@ def build_guia():
     put("Score de prioridad (0-100) = 35%·Urgencia + 30%·Atraso + 20%·Riesgo + 15%·Carga. Clasificación: ≥70 Crítica · ≥45 Alta · ≥25 Media · resto Baja. Urgencia por días restantes; Atraso por variación/atraso; Riesgo por bloqueo y bajo avance cerca del plazo; Carga por nº de tareas pendientes del responsable.","t",46)
     put("Cuellos de botella (col Alerta): ATRASO (variación<−20% o atraso>0) · BLOQUEO (debía iniciar y sigue en 0%) · SOBRECARGA (responsable con >8 pendientes) · DESVÍO-PLAN (FIN supera la fecha objetivo). Nota: el modelo no tiene columna de dependencias, por eso el bloqueo se infiere del inicio vencido sin avance.","t",46); gap()
     put("3) AUTOMATIZACIÓN DE SPRINT (sin intervención manual)","s")
-    put("En 'Historial de Sprints' se define Inicio Sprint 1 y Duración (editables). Sprint actual = ENTERO((HOY−Inicio)/Duración)+1. Regla: si una tarea NO está 'Completada' y su sprint ya cerró, su 'Sprint vigente' = sprint actual (se reasigna automáticamente al siguiente). El Sprint planificado original (col E del Gantt) NO se toca: queda como histórico. Todo es por fórmula, se recalcula solo al abrir/cambiar fechas.","t",50); gap()
+    put("En 'Historial de Sprints' se define Inicio Sprint 1 y Duración (editables). Sprint actual = ENTERO((HOY−Inicio)/Duración)+1. Regla: si una tarea NO está 'Completada' y su sprint ya cerró, su 'Sprint vigente' = sprint actual (se reasigna automáticamente al siguiente). El Sprint planificado original (col E del Gantt) NO se toca: queda como histórico. Todo es por fórmula, se recalcula solo al abrir/cambiar fechas.","t",46)
+    put("Postergar manual por cuello de botella (hoja 'Postergar'): en la fila de la tarea elija 'Postergar (nº sprints)' (lista 0-3; 1 = próximo) y el 'Motivo' (lista editable: dependencia, sobrecarga, falta de info, reestimación, recurso, prioridad, bloqueo técnico, otro). El Sprint vigente se ajusta solo y el movimiento queda registrado con ese motivo. Botón opcional de 1 clic: macro 'PostergarTareaActual' (archivo macro_sprints.bas) — asígnela a un botón de formulario.","t",46); gap()
     put("4) TRAZABILIDAD (Historial de Sprints)","s")
     put("Registra cada reasignación: ID de tarea, Tarea, Responsable, Sprint origen, Sprint destino, Fecha del movimiento (cierre del sprint origen) y Motivo. Se completa automáticamente con las tareas cuyo Sprint vigente ≠ Sprint planificado.","t",34)
     put("Para un registro PERSISTENTE con write-back físico + usuario de Windows, use la macro opcional 'macro_sprints.bas' (ver README): reasigna el nº de sprint en el Gantt y agrega una línea con fecha/usuario. Requiere guardar como .xlsm.","t",34); gap()
