@@ -4,8 +4,13 @@ Herramienta de seguimiento de proyecto convertida en un tablero **dinámico, pro
 
 > **Archivo entregable:** `Diagrama_de_Gantt___Proyecto_Datos_Op._Complejas_080626.xlsx`
 > **Documentación (Excel aparte):** `Guia_Diagrama_de_Gantt.xlsx`
+> **Macro opcional (write-back + log):** `macro_sprints.bas`
 > **Respaldo original intacto:** `original_backup.xlsx`
 > **Generador reproducible:** `build_xlsx.py`
+
+Hojas del libro: `Proyecto Datos (OKR´s)` (Gantt original), `Tablero`,
+`Entregas Próximas`, `Historial de Sprints`, y `_Datos` (motor, oculta) — más las
+3 hojas ocultas originales que no se tocaron.
 
 ---
 
@@ -113,5 +118,80 @@ sprint se agrupan en “(Sin sprint)”.
 
 ```bash
 pip install openpyxl
-python3 build_xlsx.py   # lee original_backup.xlsx y genera el archivo mejorado
+python3 build_xlsx.py   # lee original_backup.xlsx y genera el archivo mejorado + la Guía
 ```
+
+---
+
+# Requerimientos adicionales (v3)
+
+Todo lo siguiente es **aditivo** y se calcula a partir de los campos ya existentes
+(`INICIO` K, `FIN` L, `Fecha` F, `Progreso` J, `Asignado` I) + `HOY()` + un calendario de
+sprints editable. No se agregó ninguna columna a la hoja Gantt (no se desplaza la línea de
+tiempo): toda la lógica vive en la hoja oculta `_Datos`.
+
+## 1) Gestión dinámica de tareas
+- **Cómo agregar una tarea:** escribir en una fila nueva del Gantt — `Tarea` (G), `Inicio`
+  (K) y `Fecha` (F) y/o `Fin` (L). *Recomendado:* insertar la fila **dentro de un módulo**
+  para que Excel copie las fórmulas de esa fila.
+- **Se refleja solo en:** las barras del Gantt (se **amplió el formato condicional de
+  barras a las filas 56–200**, reutilizando los estilos de barra originales `dxfId 6/7/8`),
+  el `Tablero`, `Entregas Próximas` y el `Historial`. Todos los rangos llegan a la fila
+  200, así que **no hay que ajustar fórmulas**.
+- **Estructura de datos:** sin cambios en el Gantt. En `_Datos` se detecta cada tarea con
+  `EsTarea = Y(hay Tarea; no es fila de fase; hay fecha)` y se le asigna un **ID** estable
+  `="T"&TEXTO(fila)`.
+
+## 2) Priorización avanzada en "Entregas Próximas"
+Columnas nuevas (todas calculadas): `Dur.est = FinPlan−Inicio+1`, `Días real = HOY−Inicio`,
+`Avance esperado = (HOY−Inicio)/(FinPlan−Inicio)`, `Variación = Progreso−Esperado`,
+`Atraso(d) = HOY−FechaObjetivo`, `Desvío plan = FinPlan−FechaObjetivo`.
+
+**Score de prioridad (0–100)** y clasificación automática:
+```
+Score = 35%·Urgencia + 30%·Atraso + 20%·Riesgo + 15%·Carga
+≥70 Crítica · ≥45 Alta · ≥25 Media · resto Baja
+```
+- *Urgencia*: por días restantes (vencida=1; ≤3d=0,9; ≤7=0,7; ≤14=0,45; resto 0,2).
+- *Atraso*: `MEDIANA(0; MAX(−Variación; Atraso/30); 1)`.
+- *Riesgo*: bloqueo=1; (avance<50% y ≤7d)=0,7; resto 0,3.
+- *Carga*: `MEDIANA(0; (PendientesDelResponsable−4)/8; 1)`.
+
+La lista del detalle se **ordena por prioridad** (`LARGE` + `MATCH` + `INDEX`).
+
+**Cuellos de botella** (columna *Alerta*): `ATRASO`, `BLOQUEO` (debía iniciar y sigue en
+0 %), `SOBRECARGA` (responsable con > 8 pendientes), `DESVÍO-PLAN`. *El modelo no tiene
+columna de dependencias; el bloqueo se infiere del inicio vencido sin avance.* El `Tablero`
+suma estas alertas en el panel **Alertas / Cuellos de botella**.
+
+## 3) Automatización de sprint (sin intervención manual)
+En **Historial de Sprints** se configuran `Inicio Sprint 1` y `Duración` (editables).
+```
+Sprint actual = MÁX(1; ENTERO((HOY − InicioSprint1)/Duración) + 1)
+Sprint vigente = SI(Completada; planificado; MÁX(planificado; Sprint actual))
+```
+Una tarea no completada cuyo sprint ya cerró pasa **automáticamente** al sprint actual (por
+fórmula, se recalcula sola). El **Sprint planificado original (col E del Gantt) no se
+modifica** → queda como histórico. El `Tablero` agrupa por *Sprint vigente*.
+
+## 4) Trazabilidad — hoja "Historial de Sprints"
+Registra cada reasignación con: **ID, Tarea, Responsable, Sprint origen, Sprint destino,
+Fecha del movimiento** (cierre del sprint origen) **y Motivo**. Se completa solo con las
+tareas cuyo *vigente ≠ planificado*.
+
+**Registro persistente + usuario (opcional):** `macro_sprints.bas` reasigna físicamente el
+sprint en el Gantt y agrega una línea con `Now()` y `Application.UserName` en una hoja
+*Log Movimientos*. Requiere guardar como `.xlsm` (Alt+F11 → Insertar módulo → pegar →
+ejecutar `ReasignarSprints`; opcional `Workbook_Open`). *No se incrustó como `.xlsm`
+para no romper la compatibilidad del `.xlsx` actual.*
+
+## Cómo validar cada función
+1. **Tarea dinámica:** insertar una fila dentro de un módulo, completar G/K/F → aparece la
+   barra en el Gantt, sube el contador de *Tareas* del Tablero y aparece en Entregas.
+2. **Priorización:** cambiar un `Progreso` o una `Fecha` → cambian Score, Prioridad,
+   Variación y el orden de la lista. Poner avance 0 con inicio pasado → marca `BLOQUEO`.
+3. **Automatización de sprint:** en *Historial de Sprints*, fijar `Inicio Sprint 1` a una
+   fecha tal que el Sprint 1 ya haya cerrado → las tareas no completadas pasan a *Sprint
+   vigente* = actual y aparecen listadas en *Movimientos entre sprints*.
+4. **Trazabilidad:** revisar la tabla de *Movimientos*; cada fila muestra origen→destino,
+   fecha y motivo.
