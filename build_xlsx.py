@@ -165,6 +165,7 @@ def build_styles():
     adddxf("green",  '<dxf><font><color rgb="FF274E13"/></font><fill><patternFill><bgColor rgb="FFD9EAD3"/></patternFill></fill></dxf>')
     adddxf("done",   '<dxf><font><b/><color rgb="FFFFFFFF"/></font><fill><patternFill><bgColor rgb="FF38761D"/></patternFill></fill></dxf>')
     adddxf("inputhl",'<dxf><fill><patternFill><bgColor rgb="FFFFF2CC"/></patternFill></fill></dxf>')
+    adddxf("modhdr", '<dxf><font><b/><color rgb="FF1F3A52"/></font><fill><patternFill><bgColor rgb="FFD9E1F2"/></patternFill></fill></dxf>')
     dxf_xml="".join(dxfs)
     s = re.sub(r'(<dxfs count=")(\d+)(")', lambda m: f'{m.group(1)}{int(m.group(2))+len(dxfs)}{m.group(3)}', s, count=1)
     s = s.replace("</dxfs>", dxf_xml+"</dxfs>", 1)
@@ -190,13 +191,15 @@ def col_letter(c):
     return s
 def cr(r,c): return f"{col_letter(c)}{r}"
 
-def render_sheet(sh, dimension, cf="", sheetviews="", extra_after_data="", rowheights=None, dv=""):
+def render_sheet(sh, dimension, cf="", sheetviews="", extra_after_data="", rowheights=None, dv="", hidden_rows=None):
     rowheights=rowheights or {}
+    hidden_rows=hidden_rows or set()
     body=[]
     for r in sorted(sh.rows):
         cells="".join(sh.rows[r][c] for c in sorted(sh.rows[r]))
         ht=rowheights.get(r)
         hattr=f' ht="{ht}" customHeight="1"' if ht else ''
+        if r in hidden_rows: hattr+=' hidden="1"'
         body.append(f'<row r="{r}"{hattr}>{cells}</row>')
     sd="".join(body)
     cols = re.sub(r'(<col [^>]*?width="[^"]*")(\s*/?>)', r'\1 customWidth="1"\2', sh.cols)
@@ -225,9 +228,9 @@ def build_all():
     UMBRAL = ENT + "!$M$3"
     DM = "'_Datos'!"   # referencia entre comillas (máxima compatibilidad)
     SP = "'Sprints'!"                  # hoja de gestión de sprints (calendario por reunión + motivos)
-    SACT    = SP+"$M$15"               # sprint actual (calculado del calendario de reuniones)
-    CIERRES = SP+"$M$6:$M$13"          # fechas de cierre (reuniones)
-    SNUMS   = SP+"$K$6:$K$13"          # números de sprint del calendario
+    SACT    = SP+"$M$14"               # sprint actual (calculado del calendario de reuniones)
+    CIERRES = SP+"$N$5:$N$12"          # fechas de cierre (reuniones)
+    SNUMS   = SP+"$L$5:$L$12"          # números de sprint del calendario
 
     # ---------- sheet1: añadir formato condicional (semáforo col F, escala color Sprint) ----------
     s1 = rd("xl/worksheets/sheet1.xml")
@@ -293,7 +296,7 @@ def build_all():
         d.f(r,27, f'IF($C{r},ROUND(100*(0.35*$AK{r}+0.3*$AL{r}+0.2*$AM{r}+0.15*MEDIAN(0,($Y{r}-4)/8,1)),0),"")', XF["datc"])  # Score
         d.f(r,28, f'IF($C{r},IF($J{r}="Completado","—",IF($AA{r}>=70,"Crítica",IF($AA{r}>=45,"Alta",IF($AA{r}>=25,"Media","Baja")))),"")', XF["dattxt"])  # Prioridad
         d.f(r,29, f'IF($C{r},IF(LEN(TRIM($AN{r}))=0,"—",TRIM($AN{r})),"")', XF["dattxt"])   # Alertas
-        d.f(r,30, f'IF($C{r},IF($N{r}=9999,9999,IF($J{r}="Completado",$N{r},MAX($N{r},{SACT}))),"")', XF["datc"])  # SprVigente (auto: pasa al sprint actual si su sprint cerró)
+        d.f(r,30, f'IF($C{r},IF($N{r}=9999,9999,IF($J{r}="Completado",$N{r},MAX($N{r},{SACT})+IF({SP}$H{r}="Sí",1,0))),"")', XF["datc"])  # SprVigente (auto al cerrar + "pasar al siguiente" manual)
         d.f(r,31, f'IF($C{r},IF($AD{r}=9999,"(Sin sprint)",$AD{r}),"")', XF["datc"])        # SprVigKey
         d.f(r,32, f'IF($C{r},AND($N{r}<>9999,$AD{r}<>$N{r}),FALSE)', XF["datc"])            # Movido?
         d.f(r,33, f'IF($AF{r},$AO{r},"")', XF["datc"])                                       # FechaMov = cierre del sprint planificado (reunión)
@@ -461,77 +464,78 @@ def build_all():
     sheet5=render_sheet(t, f"A1:K{noterow}", cf=cf_tab, sheetviews=sv2, rowheights={1:28,2:16,5:30,4:16})
     wr("xl/worksheets/sheet5.xml", sheet5)
 
-    # ---------- sheet8: Sprints (1 sprint = 1 reunión; carry-over + desvío + motivo) ----------
+    # ---------- sheet8: Sprints (1 sprint = 1 reunión; carry-over + desvío + motivo + comentario) ----------
     sp=Sheet()
-    sp.cols=('<cols><col min="1" max="1" width="2.5"/><col min="2" max="2" width="8"/>'
-             '<col min="3" max="3" width="42"/><col min="4" max="4" width="18"/>'
-             '<col min="5" max="5" width="12"/><col min="6" max="6" width="16"/>'
-             '<col min="7" max="7" width="13"/><col min="8" max="8" width="10"/>'
-             '<col min="9" max="9" width="30"/><col min="10" max="10" width="3"/>'
-             '<col min="11" max="11" width="9"/><col min="12" max="12" width="22"/>'
-             '<col min="13" max="13" width="13"/><col min="14" max="14" width="3"/>'
-             '<col min="15" max="15" width="30"/></cols>')
-    sp.t(1,2,"SPRINTS  —  gestión por reunión (1 sprint = 1 reunión de cierre)", XF["title"]); sp.merge("B1","I1")
-    for c in range(3,10): sp.blank(1,c, XF["title"])
-    sp.t(2,2,"Un sprint es un PERÍODO que cierra en una reunión. Al cerrar, las tareas NO completadas pasan automáticamente al sprint siguiente, mostrando el desvío. Indique el motivo (editable) en la columna I. Edite las fechas de las reuniones en el calendario de la derecha.", XF["subw"]); sp.merge("B2","I2")
-    for c in range(3,10): sp.blank(2,c, XF["subw"])
-    # --- calendario de sprints (derecha, editable) ---
-    sp.t(4,11,"CALENDARIO DE SPRINTS (editable)", XF["section"]); sp.merge("K4","M4"); sp.blank(4,12,XF["section"]); sp.blank(4,13,XF["section"])
-    sp.t(5,11,"Sprint", XF["tblhdr"]); sp.t(5,12,"Reunión / Hito", XF["tblhdr"]); sp.t(5,13,"Fecha de cierre", XF["tblhdr"])
-    cierres=["DATE(2026,6,13)","DATE(2026,6,27)","DATE(2026,7,11)","DATE(2026,7,25)",
-             "DATE(2026,8,8)","DATE(2026,8,22)","DATE(2026,9,5)","DATE(2026,9,19)"]
+    sp.cols=('<cols><col min="1" max="1" width="2.5"/><col min="2" max="2" width="7"/>'
+             '<col min="3" max="3" width="44"/><col min="4" max="4" width="13"/>'
+             '<col min="5" max="5" width="16"/><col min="6" max="6" width="13"/>'
+             '<col min="7" max="7" width="9"/><col min="8" max="8" width="15"/>'
+             '<col min="9" max="9" width="25"/><col min="10" max="10" width="34"/>'
+             '<col min="11" max="11" width="3"/><col min="12" max="12" width="8"/>'
+             '<col min="13" max="13" width="20"/><col min="14" max="14" width="13"/>'
+             '<col min="15" max="15" width="3"/><col min="16" max="16" width="26"/></cols>')
+    sp.t(1,2,"SPRINTS  —  gestión por reunión (1 sprint = 1 reunión de cierre)", XF["title"]); sp.merge("B1","J1")
+    for c in range(3,11): sp.blank(1,c, XF["title"])
+    sp.t(2,2,"COMO USARLO:  1) Edite la fecha de cierre (reunión) de cada sprint en el calendario de la derecha.   2) Para pasar una tarea al sprint siguiente, elija \"Sí\" en \"Pasar al siguiente\".   3) Indique el Motivo (lista) y/o escriba un Comentario libre.   ·   Las tareas no completadas al cerrar la reunión pasan SOLAS al sprint siguiente.", XF["subw"]); sp.merge("B2","J2")
+    for c in range(3,11): sp.blank(2,c, XF["subw"])
+    # --- calendario de reuniones (derecha, editable, vertical) ---
+    sp.t(4,12,"CALENDARIO DE REUNIONES (editable)", XF["section"]); sp.merge("L4","N4"); sp.blank(4,13,XF["section"]); sp.blank(4,14,XF["section"])
+    sp.t(5,12,"Sprint", XF["tblhdr"]); sp.t(5,13,"Reunión / Hito", XF["tblhdr"]); sp.t(5,14,"Cierre", XF["tblhdr"])
+    cierres=["DATE(2026,6,16)","DATE(2026,6,23)","DATE(2026,6,30)","DATE(2026,7,7)",
+             "DATE(2026,7,14)","DATE(2026,7,21)","DATE(2026,7,28)","DATE(2026,8,4)"]
     for i,cc in enumerate(cierres):
-        rr=6+i
-        sp.n(rr,11,i+1, XF["textc_n"])
-        sp.t(rr,12,f"Reunión {i+1}", XF["input"])
-        sp.f(rr,13,cc, XF["input_date"])
-    sp.t(15,11,"Sprint actual:", XF["lbl"]); sp.merge("K15","L15"); sp.blank(15,12,XF["lbl"])
-    sp.f(15,13,'MIN(COUNT($K$6:$K$13),COUNTIF($M$6:$M$13,"<"&TODAY())+1)', XF["total"])
-    sp.t(16,11,"Hoy:", XF["lbl"]); sp.merge("K16","L16"); sp.blank(16,12,XF["lbl"])
-    sp.f(16,13,"TODAY()", XF["totald"])
+        rr=5+i
+        sp.n(rr,12,i+1, XF["textc_n"])
+        sp.t(rr,13,f"Reunión {i+1}", XF["input"])
+        sp.f(rr,14,cc, XF["input_date"])
+    sp.t(14,12,"Sprint actual:", XF["lbl"]); sp.blank(14,13,XF["lbl"])
+    sp.f(14,13,'MIN(COUNT($L$5:$L$12),COUNTIF($N$5:$N$12,"<"&TODAY())+1)', XF["total"])
+    sp.t(15,12,"Hoy:", XF["lbl"]); sp.blank(15,13,XF["lbl"])
+    sp.f(15,13,"TODAY()", XF["totald"])
     # --- lista de motivos del desvío (editable) ---
-    sp.t(4,15,"Motivos del desvío (editable)", XF["tblhdrl"])
+    sp.t(4,16,"Motivos del desvío (editable)", XF["tblhdrl"])
     motivos=["Dependencia bloqueada","Sobrecarga del responsable","Falta de información / insumos",
              "Reestimación / mayor alcance","Recurso no disponible","Prioridad reasignada",
              "Bloqueo técnico","Otro"]
-    for i,m in enumerate(motivos): sp.t(5+i,15,m, XF["textl_n"])
+    for i,m in enumerate(motivos): sp.t(5+i,16,m, XF["textl_n"])
     # --- seguimiento de tareas por sprint (izquierda, alineado al Gantt) ---
-    sp.t(4,2,"SEGUIMIENTO DE TAREAS POR SPRINT", XF["section"]); sp.merge("B4","I4")
-    for c in range(3,10): sp.blank(4,c, XF["section"])
-    th=["ID","Tarea","Responsable","Sprint planif.","Estado","Sprint vigente","Desvío (d)","Motivo del desvío (editable)"]
+    sp.t(4,2,"SEGUIMIENTO DE TAREAS POR SPRINT", XF["section"]); sp.merge("B4","J4")
+    for c in range(3,11): sp.blank(4,c, XF["section"])
+    th=["ID","Tarea","Sprint planif.","Estado","Sprint vigente","Desvío (d)","Pasar al siguiente","Motivo del desvío","Comentario (libre)"]
     for i,c in enumerate(th): sp.t(6,2+i,c, XF["tblhdr"])
     TR0=7
     for r in range(TR0, DATA_LAST+1):
         sp.f(r,2, f'IF({DM}$C{r},{DM}$O{r},"")', XF["textc_n"])
-        sp.f(r,3, f'IF({DM}$C{r},{DM}$F{r},"")', XF["textl_n"])
-        sp.f(r,4, f'IF({DM}$C{r},{DM}$G{r},"")', XF["textl_n"])
-        sp.f(r,5, f'IF({DM}$C{r},IF({DM}$N{r}=9999,"(Sin sprint)",{DM}$N{r}),"")', XF["textc_n"])
-        sp.f(r,6, f'IF({DM}$C{r},{DM}$J{r},"")', XF["textc_n"])
-        sp.f(r,7, f'IF({DM}$C{r},{DM}$AE{r},"")', XF["textc_n"])
-        sp.f(r,8, f'IF({DM}$C{r},IF({DM}$AF{r},{DM}$AP{r},"-"),"")', XF["days_n"])
-        sp.blank(r,9, XF["textl_n"])   # I: input motivo
+        sp.f(r,3, f'IF({DM}$C{r},{DM}$F{r},IF({DM}$B{r},{SRC}!$G{r},""))', XF["textl_n"])  # tarea, o título de módulo en filas de fase
+        sp.f(r,4, f'IF({DM}$C{r},IF({DM}$N{r}=9999,"(Sin sprint)",{DM}$N{r}),"")', XF["textc_n"])
+        sp.f(r,5, f'IF({DM}$C{r},{DM}$J{r},"")', XF["textc_n"])
+        sp.f(r,6, f'IF({DM}$C{r},{DM}$AE{r},"")', XF["textc_n"])
+        sp.f(r,7, f'IF({DM}$C{r},IF({DM}$AF{r},{DM}$AP{r},"-"),"")', XF["days_n"])
+        sp.blank(r,8, XF["textc_n"])   # H: Pasar al siguiente (Sí)
+        sp.blank(r,9, XF["textl_n"])   # I: Motivo (lista)
+        sp.blank(r,10, XF["textl_n"])  # J: Comentario (libre)
     tend=DATA_LAST
-    f_b=esc('$B7<>""'); f_mov=esc('AND($B7<>"",$G7<>$E7)')
-    f_venc=esc('$F7="Vencido"'); f_prox=esc('$F7="Próximo a vencer"'); f_curso=esc('$F7="En curso"'); f_comp=esc('$F7="Completado"')
+    f_b=esc('$B7<>""'); f_mov=esc('AND($B7<>"",$F7<>$D7)'); f_ph=esc(f'{DM}$B7')
+    f_venc=esc('$E7="Vencido"'); f_prox=esc('$E7="Próximo a vencer"'); f_curso=esc('$E7="En curso"'); f_comp=esc('$E7="Completado"')
     cf_sp=(
-      # semáforo de estado (col F)
-      f'<conditionalFormatting sqref="F{TR0}:F{tend}">'
+      f'<conditionalFormatting sqref="E{TR0}:E{tend}">'
       f'<cfRule type="expression" dxfId="{DX["red"]}" priority="21"><formula>{f_venc}</formula></cfRule>'
       f'<cfRule type="expression" dxfId="{DX["amber"]}" priority="22"><formula>{f_prox}</formula></cfRule>'
       f'<cfRule type="expression" dxfId="{DX["green"]}" priority="23"><formula>{f_curso}</formula></cfRule>'
       f'<cfRule type="expression" dxfId="{DX["done"]}" priority="24"><formula>{f_comp}</formula></cfRule>'
       '</conditionalFormatting>'
-      # desvío: resalta sprint vigente + desvío cuando la tarea se movió
-      f'<conditionalFormatting sqref="G{TR0}:H{tend}"><cfRule type="expression" dxfId="{DX["amber"]}" priority="25"><formula>{f_mov}</formula></cfRule></conditionalFormatting>'
-      # celda de motivo editable resaltada y borde de tabla
-      f'<conditionalFormatting sqref="I{TR0}:I{tend}"><cfRule type="expression" dxfId="{DX["inputhl"]}" priority="26"><formula>{f_b}</formula></cfRule></conditionalFormatting>'
-      f'<conditionalFormatting sqref="B{TR0}:I{tend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="40"><formula>{f_b}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="F{TR0}:G{tend}"><cfRule type="expression" dxfId="{DX["amber"]}" priority="25"><formula>{f_mov}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="H{TR0}:J{tend}"><cfRule type="expression" dxfId="{DX["inputhl"]}" priority="26"><formula>{f_b}</formula></cfRule></conditionalFormatting>'
+      # filas de fase como encabezado de grupo (módulo)
+      f'<conditionalFormatting sqref="B{TR0}:J{tend}"><cfRule type="expression" dxfId="{DX["modhdr"]}" priority="20"><formula>{f_ph}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="B{TR0}:J{tend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="40"><formula>{f_b}</formula></cfRule></conditionalFormatting>'
     )
-    dv_sp=(f'<dataValidations count="1">'
-           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="I{TR0}:I{tend}"><formula1>$O$5:$O$12</formula1></dataValidation>'
+    dv_sp=(f'<dataValidations count="2">'
+           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="H{TR0}:H{tend}"><formula1>"Sí"</formula1></dataValidation>'
+           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="I{TR0}:I{tend}"><formula1>$P$5:$P$12</formula1></dataValidation>'
            f'</dataValidations>')
-    svs='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="I7" sqref="I7"/></sheetView></sheetViews>'
-    sheet8=render_sheet(sp, f"A1:O{tend}", cf=cf_sp, sheetviews=svs, rowheights={1:26,2:30}, dv=dv_sp)
+    svs='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="H7" sqref="H7"/></sheetView></sheetViews>'
+    sheet8=render_sheet(sp, f"A1:P{tend}", cf=cf_sp, sheetviews=svs, rowheights={1:26,2:32}, dv=dv_sp)
     wr("xl/worksheets/sheet8.xml", sheet8)
 
     # ---------- plumbing: workbook.xml (4 hojas nuevas) ----------
@@ -618,11 +622,11 @@ def build_guia():
     put("Score de prioridad (0-100) = 35%·Urgencia + 30%·Atraso + 20%·Riesgo + 15%·Carga. Clasificación: ≥70 Crítica · ≥45 Alta · ≥25 Media · resto Baja. Urgencia por días restantes; Atraso por variación/atraso; Riesgo por bloqueo y bajo avance cerca del plazo; Carga por nº de tareas pendientes del responsable.","t",46)
     put("Cuellos de botella (col Alerta): ATRASO (variación<−20% o atraso>0) · BLOQUEO (debía iniciar y sigue en 0%) · SOBRECARGA (responsable con >8 pendientes) · DESVÍO-PLAN (FIN supera la fecha objetivo). Nota: el modelo no tiene columna de dependencias, por eso el bloqueo se infiere del inicio vencido sin avance.","t",46); gap()
     put("3) SPRINTS POR REUNIÓN (concepto del adjunto)","s")
-    put("Un sprint NO es una tarea: es un PERÍODO de tiempo que cierra en una reunión. En la hoja 'Sprints' hay un CALENDARIO editable (Sprint 1, 2, 3... con su fecha de cierre = la reunión). 'Sprint actual' se calcula solo: es el primer sprint cuya reunión todavía no pasó.","t",40)
-    put("Regla (igual que Scrum): al cerrar la reunión de un sprint, las tareas 'Completadas' quedan registradas en ese sprint; las NO completadas pasan automáticamente al sprint siguiente (Sprint vigente), mostrando el DESVÍO en días. El Sprint planificado (col E del Gantt) NO se toca: es el histórico.","t",40)
-    put("Indicar el motivo (cuello de botella): en 'Sprints', columna 'Motivo del desvío', elija de la lista editable (dependencia, sobrecarga, falta de info, reestimación, recurso, prioridad, bloqueo técnico, otro). Es lo único que hay que completar. Botón opcional de 1 clic: macro 'IndicarMotivo' (macro_sprints.bas).","t",40); gap()
-    put("4) TRAZABILIDAD (hoja Sprints)","s")
-    put("La tabla 'Seguimiento de tareas por sprint' muestra, por tarea: Sprint planificado → Sprint vigente, el desvío en días y el motivo. Las tareas movidas se resaltan. Para una bitácora PERSISTENTE con fecha/hora y usuario, use la macro opcional 'ReasignarSprintsFisico' (.xlsm) que además reasigna el nº de sprint en el Gantt.","t",40); gap()
+    put("Un sprint NO es una tarea: es un PERÍODO de tiempo que cierra en una REUNIÓN. En la hoja 'Sprints' hay un CALENDARIO editable (Sprint 1, 2, 3... con la fecha de su reunión de cierre). 'Sprint actual' se calcula solo: es el primer sprint cuya reunión todavía no pasó.","t",40)
+    put("Regla (igual que Scrum): al cerrar la reunión, las tareas 'Completadas' quedan en su sprint; las NO completadas pasan automáticamente al sprint siguiente (Sprint vigente), mostrando el DESVÍO en días. El Sprint planificado (col E del Gantt) NO se toca: es el histórico.","t",36)
+    put("Cómo usar la hoja 'Sprints' (3 pasos): 1) edite la fecha de cierre de cada reunión en el calendario; 2) para pasar una tarea al sprint siguiente, elija 'Sí' en la columna 'Pasar al siguiente'; 3) indique el 'Motivo del desvío' (lista editable) y/o escriba un 'Comentario' libre (texto totalmente personalizable). Las filas de cada módulo se agrupan con un encabezado.","t",44); gap()
+    put("4) TRAZABILIDAD Y MOTIVOS (hoja Sprints)","s")
+    put("La tabla 'Seguimiento de tareas por sprint' muestra por tarea: Sprint planificado → Sprint vigente, el desvío en días, el Motivo (lista) y el Comentario (libre). Las tareas movidas se resaltan en ámbar. Motivo = validación de datos (lista editable en P5:P12); Comentario = texto libre. Botones opcionales (.xlsm): 'PasarAlSiguiente' e 'IndicarMotivo'; y 'ReasignarSprintsFisico' para write-back físico + bitácora con fecha/usuario.","t",46); gap()
     put("ESCALABILIDAD","s")
     put("Las fórmulas llegan a la fila 200 del Gantt. Para superar 200 filas, amplíe el rango en _Datos. El calendario admite hasta 8 sprints (ampliable). Los sprints aparecen solos al usarse y conservan el histórico.","t",30); gap()
     put("OBSERVACIONES (no se modificaron datos; se informan para revisión)","s")

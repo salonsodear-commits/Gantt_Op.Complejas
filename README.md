@@ -179,16 +179,26 @@ registradas en su sprint; las **no completadas pasan automáticamente al sprint 
 Gantt) no se modifica** → es el histórico. `Tablero` y `Entregas` agrupan por *Sprint
 vigente*.
 
-**Indicar el motivo del desvío:** en la columna *Motivo del desvío* de la hoja **Sprints**,
-lista desplegable **editable**: *Dependencia bloqueada · Sobrecarga del responsable · Falta
-de información/insumos · Reestimación/mayor alcance · Recurso no disponible · Prioridad
-reasignada · Bloqueo técnico · Otro*. Es lo único a completar; la carga al siguiente sprint
-es automática. **Botón opcional de 1 clic:** macro `IndicarMotivo` (`macro_sprints.bas`).
+El calendario viene pre-cargado **semanal** (cierres los martes: 16/06, 23/06, 30/06…),
+adaptado a las reuniones que figuran en el Gantt; **editá esas fechas** a tu cadencia real.
+
+**Uso de la hoja `Sprints` (3 pasos, columnas a la derecha del detalle):**
+1. **Pasar al siguiente** → lista `Sí` (1 clic) para empujar la tarea al sprint siguiente,
+   además del paso automático al cerrar la reunión.
+2. **Motivo del desvío** → lista desplegable **editable** (validación de datos): *Dependencia
+   bloqueada · Sobrecarga · Falta de información · Reestimación · Recurso no disponible ·
+   Prioridad reasignada · Bloqueo técnico · Otro*.
+3. **Comentario (libre)** → **texto totalmente editable y personalizable** (sin validación),
+   para notas que no estén en la lista.
+
+Las tareas se **agrupan por módulo** con un encabezado, y las movidas se resaltan en ámbar.
+**Botones opcionales (.xlsm):** `PasarAlSiguiente` e `IndicarMotivo` (`macro_sprints.bas`).
 
 ## 4) Trazabilidad — hoja "Sprints"
-La tabla *Seguimiento de tareas por sprint* muestra, por tarea: **ID, Tarea, Responsable,
-Sprint planificado → Sprint vigente, Desvío (días) y Motivo**. Las tareas que se movieron se
-resaltan. Es a la vez el panel de acción (elegir motivo) y el registro del desvío.
+La tabla *Seguimiento de tareas por sprint* muestra, por tarea: **ID, Tarea, Sprint
+planificado → Sprint vigente, Estado, Desvío (días), Pasar al siguiente, Motivo del desvío
+y Comentario**. Las tareas que se movieron se resaltan. Es a la vez el panel de acción
+(pasar al siguiente, elegir motivo, comentar) y el registro del desvío.
 
 **Bitácora persistente + usuario (opcional):** `macro_sprints.bas` (`ReasignarSprintsFisico`)
 reasigna físicamente el nº de sprint en el Gantt y agrega una línea con `Now()` y
