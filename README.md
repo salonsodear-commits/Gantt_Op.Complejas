@@ -215,3 +215,27 @@ reasigna físicamente el nº de sprint en el Gantt y agrega una línea con `Now(
    sprint muestran *Sprint vigente* = siguiente, con su *Desvío (días)*.
 4. **Motivo del desvío:** elegir un motivo en la columna *Motivo del desvío* (lista
    desplegable) de la fila de la tarea movida.
+
+---
+
+# Backlog + Sprints por frecuencia (v4)
+
+Rediseño según el print solicitado (backlog de OKRs + sprints por frecuencia).
+
+- **Hoja `Backlog General`**: mis OKRs **por proyecto** con sus **subtareas**. Por subtarea:
+  `Estado` (Completo / No se realizó), y si no se realizó la `Acción`
+  (**Pasa al siguiente** / **Baja prioridad** / **Cancelado**) + `Comentario` (texto libre).
+  Muestra Frecuencia, Sprint planificado/vigente, **Mora** y **Nuevo**.
+  - *Baja prioridad* → sigue **Pendiente** pero **deja de contar días de mora**.
+  - *Pasa al siguiente* → aparece en el sprint siguiente con la misma lógica.
+- **Hoja `Sprints`**: tres tableros **Semanal / Quincenal / Mensual** (apertura por sprint).
+  La **frecuencia es por Proyecto** (tabla editable) y cada frecuencia tiene su calendario
+  editable (inicio + duración 7/14/30). El *Sprint actual* se calcula solo.
+- **Proyecto nuevo `Tablero Forecast`**: agregado como **solicitud nueva de la semana**
+  (marcado en Comentario + "Nuevo"), con la **misma clasificación que `Tablero BI OPEX`**
+  (Semanal) y 3 subtareas: *armado de procedimiento*; *slicer funcional con % de incremento
+  sobre venta según factores*; *factores de clientes con % de incremento sobre venta*.
+- **Tablero**: "Avance por Sprint" pasó a **"Avance por Frecuencia"** (Semanal/Quincenal/Mensual).
+
+Decisiones (según *mejor práctica*, confirmadas): una sola hoja de Sprints con 3 secciones;
+frecuencia por Proyecto; se mantuvieron y adaptaron Tablero y Entregas Próximas.
