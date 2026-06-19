@@ -9,7 +9,7 @@ Herramienta de seguimiento de proyecto convertida en un tablero **dinámico, pro
 > **Generador reproducible:** `build_xlsx.py`
 
 Hojas del libro: `Proyecto Datos (OKR´s)` (Gantt original), `Tablero`,
-`Entregas Próximas`, `Historial de Sprints`, y `_Datos` (motor, oculta) — más las
+`Entregas Próximas`, `Sprints`, y `_Datos` (motor, oculta) — más las
 3 hojas ocultas originales que no se tocaron.
 
 ---
@@ -164,47 +164,44 @@ La lista del detalle se **ordena por prioridad** (`LARGE` + `MATCH` + `INDEX`).
 columna de dependencias; el bloqueo se infiere del inicio vencido sin avance.* El `Tablero`
 suma estas alertas en el panel **Alertas / Cuellos de botella**.
 
-## 3) Automatización de sprint (sin intervención manual)
-En **Historial de Sprints** se configuran `Inicio Sprint 1` y `Duración` (editables).
+## 3) Sprints por reunión (1 sprint = 1 reunión de cierre)
+Siguiendo el concepto del adjunto: **un sprint es un período de tiempo que cierra en una
+reunión**, no una tarea. En la hoja **Sprints** hay un **calendario editable** (Sprint 1, 2,
+3… con su *fecha de cierre* = la reunión):
 ```
-Sprint actual = MÁX(1; ENTERO((HOY − InicioSprint1)/Duración) + 1)
+Sprint actual  = primer sprint cuya reunión aún no pasó
+               = MÍN(nº de sprints; CONTAR.SI(cierres; "<"&HOY) + 1)
 Sprint vigente = SI(Completada; planificado; MÁX(planificado; Sprint actual))
 ```
-Una tarea no completada cuyo sprint ya cerró pasa **automáticamente** al sprint actual (por
-fórmula, se recalcula sola). El **Sprint planificado original (col E del Gantt) no se
-modifica** → queda como histórico. El `Tablero` agrupa por *Sprint vigente*.
+**Regla (igual que Scrum):** al cerrar la reunión, las tareas *Completadas* quedan
+registradas en su sprint; las **no completadas pasan automáticamente al sprint siguiente**
+(*Sprint vigente*), mostrando el **desvío en días**. El **Sprint planificado (col E del
+Gantt) no se modifica** → es el histórico. `Tablero` y `Entregas` agrupan por *Sprint
+vigente*.
 
-**Postergar manualmente por cuello de botella — hoja `Postergar`:** en la fila de cada
-tarea hay dos listas desplegables:
-- **Postergar (nº sprints)** → `0,1,2,3` (1 = próximo sprint).
-- **Motivo del cuello de botella** → lista editable: *Dependencia bloqueada · Sobrecarga del
-  responsable · Falta de información/insumos · Reestimación/mayor alcance · Recurso no
-  disponible · Prioridad reasignada · Bloqueo técnico · Otro*.
+**Indicar el motivo del desvío:** en la columna *Motivo del desvío* de la hoja **Sprints**,
+lista desplegable **editable**: *Dependencia bloqueada · Sobrecarga del responsable · Falta
+de información/insumos · Reestimación/mayor alcance · Recurso no disponible · Prioridad
+reasignada · Bloqueo técnico · Otro*. Es lo único a completar; la carga al siguiente sprint
+es automática. **Botón opcional de 1 clic:** macro `IndicarMotivo` (`macro_sprints.bas`).
 
-`Sprint vigente = MÁX(planificado; Sprint actual) + Postergar`. Al elegir las opciones, el
-sprint vigente se recalcula solo y el movimiento se registra en `Historial de Sprints` con
-ese motivo. **Botón de 1 clic (opcional):** la macro `PostergarTareaActual` de
-`macro_sprints.bas` rellena esas celdas automáticamente — basta insertar un *Botón de
-formulario* y asignarle la macro (requiere `.xlsm`).
+## 4) Trazabilidad — hoja "Sprints"
+La tabla *Seguimiento de tareas por sprint* muestra, por tarea: **ID, Tarea, Responsable,
+Sprint planificado → Sprint vigente, Desvío (días) y Motivo**. Las tareas que se movieron se
+resaltan. Es a la vez el panel de acción (elegir motivo) y el registro del desvío.
 
-## 4) Trazabilidad — hoja "Historial de Sprints"
-Registra cada reasignación con: **ID, Tarea, Responsable, Sprint origen, Sprint destino,
-Fecha del movimiento** (cierre del sprint origen) **y Motivo**. Se completa solo con las
-tareas cuyo *vigente ≠ planificado*.
-
-**Registro persistente + usuario (opcional):** `macro_sprints.bas` reasigna físicamente el
-sprint en el Gantt y agrega una línea con `Now()` y `Application.UserName` en una hoja
-*Log Movimientos*. Requiere guardar como `.xlsm` (Alt+F11 → Insertar módulo → pegar →
-ejecutar `ReasignarSprints`; opcional `Workbook_Open`). *No se incrustó como `.xlsm`
-para no romper la compatibilidad del `.xlsx` actual.*
+**Bitácora persistente + usuario (opcional):** `macro_sprints.bas` (`ReasignarSprintsFisico`)
+reasigna físicamente el nº de sprint en el Gantt y agrega una línea con `Now()` y
+`Application.UserName` en una hoja *Log Movimientos*. Requiere `.xlsm`. *No se incrustó como
+`.xlsm` para no romper la compatibilidad del `.xlsx` actual.*
 
 ## Cómo validar cada función
 1. **Tarea dinámica:** insertar una fila dentro de un módulo, completar G/K/F → aparece la
    barra en el Gantt, sube el contador de *Tareas* del Tablero y aparece en Entregas.
 2. **Priorización:** cambiar un `Progreso` o una `Fecha` → cambian Score, Prioridad,
    Variación y el orden de la lista. Poner avance 0 con inicio pasado → marca `BLOQUEO`.
-3. **Automatización de sprint:** en *Historial de Sprints*, fijar `Inicio Sprint 1` a una
-   fecha tal que el Sprint 1 ya haya cerrado → las tareas no completadas pasan a *Sprint
-   vigente* = actual y aparecen listadas en *Movimientos entre sprints*.
-4. **Trazabilidad:** revisar la tabla de *Movimientos*; cada fila muestra origen→destino,
-   fecha y motivo.
+3. **Sprints por reunión:** en la hoja *Sprints*, editar la *fecha de cierre* de una reunión
+   para que ya haya pasado → sube el *Sprint actual* y las tareas no completadas de ese
+   sprint muestran *Sprint vigente* = siguiente, con su *Desvío (días)*.
+4. **Motivo del desvío:** elegir un motivo en la columna *Motivo del desvío* (lista
+   desplegable) de la fila de la tarea movida.
