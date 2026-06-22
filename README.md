@@ -239,3 +239,19 @@ Rediseño según el print solicitado (backlog de OKRs + sprints por frecuencia).
 
 Decisiones (según *mejor práctica*, confirmadas): una sola hoja de Sprints con 3 secciones;
 frecuencia por Proyecto; se mantuvieron y adaptaron Tablero y Entregas Próximas.
+
+---
+
+# Ajustes (v5)
+
+- **Tablero Forecast dentro de los Tableros (25%)**: el proyecto nuevo se reubicó en el
+  bloque de Tableros (filas 48–51 del Gantt, dentro del merge `H22:H51` del 25%). **No
+  figura aparte** y el **total general sigue siendo 100%** (no suma peso propio).
+- **Backlog trae los comentarios del Gantt** (1ª hoja, columna *Comentarios*) en
+  *Comentario (Gantt)*, y agrega una *Justificación / Comentario* libre. Así queda el
+  **historial claro** de qué no se hizo y por qué (aunque esté justificado).
+- **Frecuencias editables por validación de datos** (lista Semanal/Quincenal/Mensual) en la
+  tabla *Frecuencia por Proyecto* de la hoja Sprints.
+- **"Nuevo" editable y por sprint**: la columna *Sol. en Sprint* indica el sprint en que se
+  solicitó; *Nuevo* muestra "Nuevo S#" solo mientras el sprint actual de su frecuencia
+  coincide (ej.: nuevo en S1 deja de serlo en S2).
