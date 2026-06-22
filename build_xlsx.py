@@ -236,6 +236,22 @@ def build_all():
 
     # ---------- sheet1: reubicar "Tablero Forecast" DENTRO del bloque de Tableros (25%) + formato condicional ----------
     s1 = rd("xl/worksheets/sheet1.xml")
+    # 0) re-aplicar las ediciones reales cargadas por el usuario en la versión 190626 (comentarios, avance, fechas)
+    def _settext(s, ref, txt):
+        m=re.search(r'<c r="%s"( s="\d+")?[^>]*>.*?</c>'%ref, s, re.S)
+        return s[:m.start()]+f'<c r="{ref}"{m.group(1) or ""} t="inlineStr"><is><t xml:space="preserve">{esc(txt)}</t></is></c>'+s[m.end():] if m else s
+    def _setnum(s, ref, val):
+        return re.sub(r'(<c r="%s"( s="\d+")?[^>]*?>)(?:<f[^>]*>[^<]*</f>)?<v>[^<]*</v>(</c>)'%ref, lambda m:f'{m.group(1)}<v>{val}</v>{m.group(3)}', s, count=1, flags=re.S)
+    _edits_txt={
+        "C8":"Ok registro global Personas y Móviles (Habilitado/ Inhabilitado/ Dado de baja) + Vencimientos; Próximo: Diagrama (30/6 fecha estimada); Se avanzó con módulo diagrama.",
+        "C11":"Reunión con Danna Mar 16/06; dependo de tiempos de Danna. Se avanzó pero falta ya que estamos realizando una automatización linea por linea.",
+        "C13":"pedir últimos a Carlos Hernández; no llegué",
+        "C15":"Avance Nico Sifuentes; sólo pendiente procedimiento.",
+        "C16":"Reunión jue 11/6 - Avance Seba Oliver; sólo pendiente procedimiento.",
+        "C19":"mar 9/6 Reunión Torres, Huilen (Equipo IA)  - Definir con Nico Vazquez. En reunión se definió que una vez finalizado el proyecto, el backend, seguridad y deploy lo continúan en IT.",
+        "C37":"No llegué por nuevas solicitudes: Tablero Forecast + Reuniones por tarifas YPF + Contratos SF"}
+    for _ref,_t in _edits_txt.items(): s1=_settext(s1,_ref,_t)
+    for _ref,_v in {"J10":1,"J15":0.95,"J19":1,"F23":46192,"F24":46192}.items(): s1=_setnum(s1,_ref,_v)  # H7=0.4 (de tu archivo) NO se aplica: rompería el 100% (quedaría 135%)
     # 1) desplazar filas >=48 en +4 (para insertar Forecast tras el último tablero, fila 47)
     PIVOT, SH = 48, 4
     def _bump(txt):
@@ -526,14 +542,15 @@ def build_all():
              '<col min="10" max="10" width="9" hidden="1"/></cols>')
     sp.t(1,2,"SPRINTS — Semanal · Quincenal · Mensual", XF["title"]); sp.merge("B1","F1")
     for c in range(3,7): sp.blank(1,c, XF["title"])
-    sp.t(2,2,"Apertura de sprints por frecuencia. Cada tarea cae en el sprint de su frecuencia según su fecha. Las no completadas pasan SOLAS al sprint siguiente (se indica en 'Backlog General'). Edite las fechas de inicio y la frecuencia por proyecto a la derecha.", XF["subw"]); sp.merge("B2","F2")
+    sp.t(2,2,"Cada tarea cae en el sprint de su frecuencia según su fecha. El nº de 'Sprint actual' es el MISMO que en 'Backlog General'. Si en el Backlog una tarea 'Pasa al siguiente', su Sprint actual sube y aparece en el sprint siguiente, acá y allá. Fechas reales: el Quincenal cierra 13/06, 27/06, 11/07... (editable a la derecha).", XF["subw"]); sp.merge("B2","F2")
     for c in range(3,7): sp.blank(2,c, XF["subw"])
     # --- config: calendario por frecuencia ---
     sp.t(3,2,"CALENDARIO POR FRECUENCIA (editable)", XF["section"]); sp.merge("B3","E3"); [sp.blank(3,c,XF["section"]) for c in (3,4,5)]
     for i,h in enumerate(["Frecuencia","Inicio Sprint 1","Duración (días)","Sprint actual"]): sp.t(4,2+i,h, XF["tblhdr"])
-    for i,(fq,dur) in enumerate([("Semanal",7),("Quincenal",14),("Mensual",30)]):
+    # fechas reales: Quincenal alineado a tus reuniones (cierres 13/06, 27/06, 11/07, ...)
+    for i,(fq,dur,ini) in enumerate([("Semanal",7,"DATE(2026,6,15)"),("Quincenal",14,"DATE(2026,5,31)"),("Mensual",30,"DATE(2026,6,1)")]):
         rr=5+i
-        sp.t(rr,2, fq, XF["textc_n"]); sp.f(rr,3,"DATE(2026,6,1)", XF["input_date"])
+        sp.t(rr,2, fq, XF["textc_n"]); sp.f(rr,3,ini, XF["input_date"])
         sp.n(rr,4,dur, XF["input"]); sp.f(rr,5, f"MAX(1,INT((TODAY()-$C{rr})/$D{rr})+1)", XF["total"])
     # --- config: frecuencia por proyecto ---
     sp.t(3,7,"FRECUENCIA POR PROYECTO (editable)", XF["section"]); sp.merge("G3","H3"); sp.blank(3,8,XF["section"])
@@ -547,7 +564,7 @@ def build_all():
     NB=25; cf_sp=""; prio=10
     for bi,(title,key,ds) in enumerate(boards):
         sp.t(ds-2,2,title+"  (ordenado por Sprint)", XF["section"]); sp.merge(f"B{ds-2}",f"F{ds-2}"); [sp.blank(ds-2,c,XF["section"]) for c in (3,4,5,6)]
-        for i,h in enumerate(["Sprint","Proyecto","Subtarea","Estado","Mora (d)"]): sp.t(ds-1,2+i,h, XF["tblhdr"])
+        for i,h in enumerate(["Sprint actual","Proyecto","Subtarea","Estado","Mora (d)"]): sp.t(ds-1,2+i,h, XF["tblhdr"])
         for kk in range(NB):
             r=ds+kk
             sp.f(r,10, f'IFERROR(MATCH(SMALL({DM}{key}$7:{key}$200,ROW()-{ds}+1),{DM}{key}$7:{key}$200,0),"")', XF["datc"])
@@ -585,9 +602,9 @@ def build_all():
              '<col min="13" max="13" width="12"/><col min="14" max="14" width="12"/></cols>')
     bg.t(1,2,"BACKLOG GENERAL — mis OKRs por proyecto", XF["title"]); bg.merge("B1","N1")
     for c in range(3,15): bg.blank(1,c, XF["title"])
-    bg.t(2,2,'Estado = "Completo" o "No se realizó". Si NO se realizó, Acción: "Pasa al siguiente" / "Baja prioridad" (sigue pendiente y NO cuenta mora) / "Cancelado". El "Comentario (Gantt)" trae las notas de la 1ª hoja; agregue su "Justificación" libre. "Sol. en Sprint" marca en qué sprint fue solicitada (deja de ser "Nuevo" al avanzar de sprint).', XF["subw"]); bg.merge("B2","N2")
+    bg.t(2,2,'Estado = "Completo" o "No se realizó". Si NO se realizó, Acción: "Pasa al siguiente" / "Baja prioridad" (sigue pendiente y NO cuenta mora) / "Cancelado". El "Comentario (Gantt)" trae las notas de la 1ª hoja; agregue su "Justificación" libre. "Sol. en Sprint" marca en qué sprint fue solicitada (deja de ser "Nuevo" al avanzar de sprint). El "SPRINT ACTUAL" de cada tarea es el MISMO número que figura en la hoja Sprints.', XF["subw"]); bg.merge("B2","N2")
     for c in range(3,15): bg.blank(2,c, XF["subw"])
-    th=["ID","Subtarea / Proyecto","Frecuencia","Fecha obj.","Sprint planif.","Estado","Acción si no se realizó","Sprint vigente","Mora (d)","Comentario (Gantt)","Justificación / Comentario","Sol. en Sprint","Nuevo"]
+    th=["ID","Subtarea / Proyecto","Frecuencia","Fecha obj.","Sprint inicial","Estado","Acción si no se realizó","SPRINT ACTUAL","Mora (d)","Comentario (Gantt)","Justificación / Comentario","Sol. en Sprint","Nuevo"]
     for i,h in enumerate(th): bg.t(6,2+i,h, XF["tblhdr"])
     BR0=7
     for r in range(BR0, DATA_LAST+1):
