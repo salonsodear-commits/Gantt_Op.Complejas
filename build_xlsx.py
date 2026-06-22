@@ -252,7 +252,10 @@ def build_all():
         "C19":"mar 9/6 Reunión Torres, Huilen (Equipo IA)  - Definir con Nico Vazquez. En reunión se definió que una vez finalizado el proyecto, el backend, seguridad y deploy lo continúan en IT.",
         "C37":"No llegué por nuevas solicitudes: Tablero Forecast + Reuniones por tarifas YPF + Contratos SF"}
     for _ref,_t in _edits_txt.items(): s1=_settext(s1,_ref,_t)
-    for _ref,_v in {"J10":1,"J15":0.95,"J19":1,"F23":46192,"F24":46192}.items(): s1=_setnum(s1,_ref,_v)  # H7=0.4 (de tu archivo) NO se aplica: rompería el 100% (quedaría 135%)
+    # fechas: 12/06 -> 15/06 (alinear con inicio del Sprint 1). F en tareas y K(Inicio) en R26. L sigue a F.
+    _d12,_d15 = 46185, 46188
+    _f1506={f"F{r}":_d15 for r in (25,28,29,30,31,37,38,39,40,41,42,46,47)}; _f1506["K26"]=_d15
+    for _ref,_v in {"J10":1,"J15":0.95,"J19":1,"F23":46192,"F24":46192, **_f1506}.items(): s1=_setnum(s1,_ref,_v)  # H7=0.4 (de tu archivo) NO se aplica: rompería el 100% (quedaría 135%)
     # 1) desplazar filas >=48 en +4 (para insertar Forecast tras el último tablero, fila 47)
     PIVOT, SH = 48, 4
     def _bump(txt):
