@@ -135,6 +135,7 @@ def build_styles():
     addxf("totald",  numFmt=173, font=F["lbl"], fill=FI["total"], border=BO["all"], halign="center")
     addxf("input",   numFmt=1, font=F["lbl"], fill=FI["input"], border=BO["all"], halign="center")
     addxf("input_date", numFmt=173, font=F["lbl"], fill=FI["input"], border=BO["all"], halign="center")
+    addxf("input_l", font=F["lbl"], fill=FI["input"], border=BO["all"], halign="left", wrap=True)
     addxf("leg_red", font=F["legw"], fill=FI["red"], border=BO["all"], halign="center")
     addxf("leg_amb", font=F["lbl"], fill=FI["amber"], border=BO["all"], halign="center")
     addxf("leg_grn", font=F["lbl"], fill=FI["green"], border=BO["all"], halign="center")
@@ -331,11 +332,11 @@ def build_all():
         d.f(r,5,  f'IF($C{r},{SRC}!$E{r},"")', XF["datc"])
         d.f(r,6,  f'IF($C{r},{SRC}!$G{r},"")', XF["dattxt"])
         d.f(r,7,  f'IF($C{r},IF({SRC}!$I{r}="","(Sin asignar)",{SRC}!$I{r}),"")', XF["dattxt"])
-        d.f(r,8,  f'IF($C{r},IF(ISNUMBER({SRC}!$F{r}),{SRC}!$F{r},{SRC}!$L{r}),"")', XF["datc"])
+        d.f(r,8,  f'IF($C{r},IF(ISNUMBER({SRC}!$F{r}),{SRC}!$F{r},""),"")', XF["datc"])
         d.f(r,9,  f'IF($C{r},{SRC}!$J{r},"")', XF["datc"])
-        d.f(r,10, f'IF($C{r},IF($I{r}>=1,"Completado",IF($H{r}<TODAY(),"Vencido",IF(($H{r}-TODAY())<={UMBRAL},"Próximo a vencer","En curso"))),"")', XF["dattxt"])
-        d.f(r,11, f'IF($C{r},$H{r}-TODAY(),"")', XF["datc"])
-        d.f(r,12, f'IF($C{r},$AD{r}*1000000+$H{r}+ROW()/100000,"")', XF["datc"])
+        d.f(r,10, f'IF($C{r},IF($I{r}>=1,"Completado",IF(NOT(ISNUMBER($H{r})),"Sin fecha",IF($H{r}<TODAY(),"Vencido",IF(($H{r}-TODAY())<={UMBRAL},"Próximo a vencer","En curso")))),"")', XF["dattxt"])
+        d.f(r,11, f'IF(AND($C{r},ISNUMBER($H{r})),$H{r}-TODAY(),"")', XF["datc"])
+        d.f(r,12, f'IF(AND($C{r},ISNUMBER($H{r})),$AD{r}*1000000+$H{r}+ROW()/100000,"")', XF["datc"])
         d.f(r,13, f'IF($C{r},IF($AD{r}=9999,"(Sin sprint)",$AD{r}),"")', XF["datc"])     # SprintKey (vigente)
         d.f(r,14, f'IF($C{r},IF({SRC}!$E{r}="",9999,{SRC}!$E{r}),"")', XF["datc"])        # SprintNum (planificado)
         d.f(r,15, f'IF($C{r},"T"&TEXT(ROW(),"000"),"")', XF["datc"])                       # ID
@@ -345,12 +346,12 @@ def build_all():
         d.f(r,20, f'IF($C{r},MAX(0,TODAY()-{SRC}!$K{r}),"")', XF["datc"])                   # DíasTransc (real)
         d.f(r,21, f'IF($C{r},MEDIAN(0,(TODAY()-{SRC}!$K{r})/MAX(1,$R{r}-{SRC}!$K{r}),1),"")', XF["datc"])  # AvEsperado
         d.f(r,22, f'IF($C{r},$I{r}-$U{r},"")', XF["datc"])                                  # VarAvance (real-esperado)
-        d.f(r,23, f'IF($C{r},IF($J{r}="Completado",0,MAX(0,TODAY()-$H{r})),"")', XF["datc"])# Atraso (días vs objetivo)
+        d.f(r,23, f'IF($C{r},IF(OR($J{r}="Completado",NOT(ISNUMBER($H{r}))),0,MAX(0,TODAY()-$H{r})),"")', XF["datc"])# Atraso (días vs objetivo)
         d.f(r,24, f'IF($C{r},IF(ISNUMBER($H{r}),$R{r}-$H{r},0),"")', XF["datc"])            # DesvíoPlan (fin-obj)
         d.f(r,25, f'IF($C{r},COUNTIFS($G$7:$G$200,$G{r},$J$7:$J$200,"<>Completado",$J$7:$J$200,"<>"),"")', XF["datc"])  # CargaResp
         d.f(r,26, f'IF($C{r},AND($I{r}=0,{SRC}!$K{r}<=TODAY(),$J{r}<>"Completado"),"")', XF["datc"])  # Bloqueo
         d.f(r,27, f'IF($C{r},ROUND(100*(0.35*$AK{r}+0.3*$AL{r}+0.2*$AM{r}+0.15*MEDIAN(0,($Y{r}-4)/8,1)),0),"")', XF["datc"])  # Score
-        d.f(r,28, f'IF($C{r},IF($J{r}="Completado","—",IF($AA{r}>=70,"Crítica",IF($AA{r}>=45,"Alta",IF($AA{r}>=25,"Media","Baja")))),"")', XF["dattxt"])  # Prioridad
+        d.f(r,28, f'IF($C{r},IF(OR($J{r}="Completado",$J{r}="Sin fecha"),"—",IF($AA{r}>=70,"Crítica",IF($AA{r}>=45,"Alta",IF($AA{r}>=25,"Media","Baja")))),"")', XF["dattxt"])  # Prioridad
         d.f(r,29, f'IF($C{r},IF(LEN(TRIM($AN{r}))=0,"—",TRIM($AN{r})),"")', XF["dattxt"])   # Alertas
         d.f(r,30, f'IF($C{r},$AV{r},"")', XF["datc"])                                        # SprVigente = sprint vigente (por frecuencia)
         d.f(r,31, f'IF($C{r},$AZ{r},"")', XF["datc"])                                        # SprVigKey = "Frecuencia · S#"
@@ -358,7 +359,7 @@ def build_all():
         d.f(r,33, f'IF($C{r},IF($AV{r}<>$AR{r},$AW{r},""),"")', XF["datc"])                   # FechaMov = cierre del sprint planificado
         d.f(r,34, f'IF($C{r},{BL}$L{r},"")', XF["dattxt"])                                    # Justificación/Comentario (del Backlog)
         d.f(r,35, f'IF($C{r},$AV{r}*100000+ROW(),"")', XF["datc"])                            # aux
-        d.f(r,36, f'IF($C{r},$AA{r}*1000000-MEDIAN(-9999,$K{r},9999)*100+(300-ROW()),"")', XF["datc"])  # ClavePri
+        d.f(r,36, f'IF(AND($C{r},ISNUMBER($H{r})),$AA{r}*1000000-MEDIAN(-9999,$K{r},9999)*100+(300-ROW()),"")', XF["datc"])  # ClavePri
         d.f(r,37, f'IF($C{r},IF($J{r}="Completado",0,IF($K{r}<0,1,IF($K{r}<=3,0.9,IF($K{r}<=7,0.7,IF($K{r}<=14,0.45,0.2))))),"")', XF["datc"])  # urg
         d.f(r,38, f'IF($C{r},IF($J{r}="Completado",0,MEDIAN(0,MAX(-$V{r},$W{r}/30),1)),"")', XF["datc"])  # atr
         d.f(r,39, f'IF($C{r},IF($J{r}="Completado",0,IF($Z{r},1,IF(AND($I{r}<0.5,$K{r}<=7),0.7,0.3))),"")', XF["datc"])  # rsk
@@ -366,19 +367,19 @@ def build_all():
         d.f(r,41, f'IF($C{r},IFERROR(VLOOKUP($D{r},{PFREQ},2,FALSE),"Semanal"),"")', XF["dattxt"])  # Frecuencia (por proyecto)
         d.f(r,42, f'IF($C{r},IF($AO{r}="Semanal",{SEM_LEN},IF($AO{r}="Quincenal",{QUI_LEN},{MEN_LEN})),"")', XF["datc"])  # FreqLen
         d.f(r,43, f'IF($C{r},IF($AO{r}="Semanal",{SEM_INI},IF($AO{r}="Quincenal",{QUI_INI},{MEN_INI})),"")', XF["datc"])  # FreqStart
-        d.f(r,44, f'IF($C{r},MAX(1,INT(($H{r}-$AQ{r})/$AP{r})+1),"")', XF["datc"])            # SprintPlanFreq
+        d.f(r,44, f'IF(AND($C{r},ISNUMBER($H{r})),MAX(1,INT(($H{r}-$AQ{r})/$AP{r})+1),"")', XF["datc"])            # SprintPlanFreq
         d.f(r,45, f'IF($C{r},IF($AO{r}="Semanal",{SEM_ACT},IF($AO{r}="Quincenal",{QUI_ACT},{MEN_ACT})),"")', XF["datc"])  # SprintActFreq
         d.f(r,46, f'IF($C{r},{BL}$G{r},"")', XF["dattxt"])                                    # EstadoIn (Backlog: En curso/Completo/No se realizó)
         d.f(r,47, f'IF($C{r},{BL}$H{r},"")', XF["dattxt"])                                    # AccionIn (Backlog: Pasa/Baja/Cancelado)
-        d.f(r,48, f'IF($C{r},IF(OR($AT{r}="Completo",$AU{r}="Cancelado",$AU{r}="Baja prioridad"),$AR{r},IF($AU{r}="Pasa al siguiente",MAX($AR{r}+1,$AS{r}),MAX($AR{r},$AS{r}))),"")', XF["datc"])  # SprintVigFreq
-        d.f(r,49, f'IF($C{r},$AQ{r}+$AR{r}*$AP{r}-1,"")', XF["datc"])                         # CierrePlanFreq
-        d.f(r,50, f'IF($C{r},IF(OR($AT{r}="Completo",$AU{r}="Cancelado",$AU{r}="Baja prioridad"),0,MAX(0,TODAY()-$AW{r})),"")', XF["datc"])  # MoraFreq (no cuenta si baja prioridad/cancelado/completo)
-        d.f(r,51, f'IF($C{r},IF($AT{r}="Completo","Completo",IF($AU{r}="Cancelado","Cancelado",IF($AU{r}="Baja prioridad","Baja prioridad",IF($AX{r}>0,"Vencida","Pendiente")))),"")', XF["dattxt"])  # EstadoBoard
-        d.f(r,52, f'IF($C{r},$AO{r}&" · S"&$AV{r},"")', XF["dattxt"])                         # SprintKeyFreq
+        d.f(r,48, f'IF(AND($C{r},ISNUMBER($AR{r})),IF(OR($AT{r}="Completo",$AU{r}="Cancelado",$AU{r}="Baja prioridad"),$AR{r},IF($AU{r}="Pasa al siguiente",MAX($AR{r}+1,$AS{r}),MAX($AR{r},$AS{r}))),"")', XF["datc"])  # SprintVigFreq
+        d.f(r,49, f'IF(AND($C{r},ISNUMBER($AR{r})),$AQ{r}+$AR{r}*$AP{r}-1,"")', XF["datc"])                         # CierrePlanFreq
+        d.f(r,50, f'IF($C{r},IF(OR($AT{r}="Completo",$AU{r}="Cancelado",$AU{r}="Baja prioridad",NOT(ISNUMBER($AW{r}))),0,MAX(0,TODAY()-$AW{r})),"")', XF["datc"])  # MoraFreq (no cuenta si baja prioridad/cancelado/completo)
+        d.f(r,51, f'IF($C{r},IF(NOT(ISNUMBER($AR{r})),"Sin fecha",IF($AT{r}="Completo","Completo",IF($AU{r}="Cancelado","Cancelado",IF($AU{r}="Baja prioridad","Baja prioridad",IF($AX{r}>0,"Vencida","Pendiente"))))),"")', XF["dattxt"])  # EstadoBoard
+        d.f(r,52, f'IF($C{r},IF(ISNUMBER($AV{r}),$AO{r}&" · S"&$AV{r},"(Sin fecha)"),"")', XF["dattxt"])                         # SprintKeyFreq
         d.f(r,53, f'IF($C{r},IF(AND(ISNUMBER({BL}$M{r}),{BL}$M{r}=$AS{r}),"Nuevo S"&{BL}$M{r},""),"")', XF["datc"])  # Nuevo (solicitado en sprint = sprint actual de su frecuencia)
-        d.f(r,54, f'IF(AND($C{r},$AO{r}="Semanal"),$AV{r}*100000+ROW(),"")', XF["datc"])      # keySem
-        d.f(r,55, f'IF(AND($C{r},$AO{r}="Quincenal"),$AV{r}*100000+ROW(),"")', XF["datc"])    # keyQui
-        d.f(r,56, f'IF(AND($C{r},$AO{r}="Mensual"),$AV{r}*100000+ROW(),"")', XF["datc"])      # keyMen
+        d.f(r,54, f'IF(AND($C{r},$AO{r}="Semanal",ISNUMBER($AV{r})),$AV{r}*100000+ROW(),"")', XF["datc"])      # keySem
+        d.f(r,55, f'IF(AND($C{r},$AO{r}="Quincenal",ISNUMBER($AV{r})),$AV{r}*100000+ROW(),"")', XF["datc"])    # keyQui
+        d.f(r,56, f'IF(AND($C{r},$AO{r}="Mensual",ISNUMBER($AV{r})),$AV{r}*100000+ROW(),"")', XF["datc"])      # keyMen
     # listado dinámico de sprints VIGENTES: solo aparecen los que EXISTEN
     for r in range(7,37):                     # candidatos 1..30
         d.f(r,16, "ROW()-6", XF["datc"])
@@ -612,10 +613,10 @@ def build_all():
         bg.f(r,3, f'IF({DM}$C{r},{DM}$F{r},IF({DM}$B{r},{SRC}!$G{r},""))', XF["textl_n"])  # subtarea o título de proyecto (fase)
         bg.f(r,4, f'IF({DM}$C{r},{DM}$AO{r},"")', XF["textc_n"])      # Frecuencia
         bg.f(r,5, f'IF({DM}$C{r},{DM}$H{r},"")', XF["date_n"])         # Fecha objetivo
-        bg.f(r,6, f'IF({DM}$C{r},{DM}$AR{r},"")', XF["textc_n"])      # Sprint planificado
+        bg.f(r,6, f'IF({DM}$C{r},IF(ISNUMBER({DM}$AR{r}),{DM}$AR{r},"(Sin fecha)"),"")', XF["textc_n"])      # Sprint planificado
         bg.blank(r,7, XF["textc_n"])    # G: Estado (input)
         bg.blank(r,8, XF["textl_n"])    # H: Acción (input)
-        bg.f(r,9, f'IF({DM}$C{r},{DM}$AV{r},"")', XF["textc_n"])      # Sprint vigente
+        bg.f(r,9, f'IF({DM}$C{r},IF(ISNUMBER({DM}$AV{r}),{DM}$AV{r},"(Sin fecha)"),"")', XF["textc_n"])      # Sprint vigente
         bg.f(r,10, f'IF({DM}$C{r},{DM}$AX{r},"")', XF["days_n"])       # Mora
         bg.f(r,11, f'IF({DM}$C{r},IF({SRC}!$C{r}="","",{SRC}!$C{r}),"")', XF["textl_n"])  # K: Comentario del Gantt (1ª hoja)
         bg.blank(r,12, XF["textl_n"])   # L: Justificación / Comentario (input)
@@ -642,10 +643,62 @@ def build_all():
     sheet9=render_sheet(bg, f"A1:N{bend}", cf=cf_bg, sheetviews=svb, rowheights={1:26,2:34}, dv=dv_bg)
     wr("xl/worksheets/sheet9.xml", sheet9)
 
-    # ---------- plumbing: workbook.xml (5 hojas nuevas) ----------
+    # ---------- sheet10: Historial de Sprints (acumulativo + editable) ----------
+    hs=Sheet()
+    hs.cols=('<cols><col min="1" max="1" width="2.5"/><col min="2" max="2" width="12"/>'
+             '<col min="3" max="3" width="8"/><col min="4" max="4" width="13"/>'
+             '<col min="5" max="5" width="13"/><col min="6" max="6" width="20"/>'
+             '<col min="7" max="7" width="18"/><col min="8" max="8" width="14"/>'
+             '<col min="9" max="9" width="62"/></cols>')
+    hs.t(1,2,"HISTORIAL DE SPRINTS — acumulativo y editable", XF["title"]); hs.merge("B1","I1")
+    for c in range(3,10): hs.blank(1,c, XF["title"])
+    hs.t(2,2,"Todos los sprints con sus fechas (salen del calendario de la hoja Sprints). 'Tareas (compl./plan)' es automático. '¿Se completó?' y 'Motivo' son EDITABLES y se conservan (historial). Un sprint sin tareas se marca 'sin tareas' — no se inventan sprints; las tareas sin fecha no entran a ningún sprint.", XF["subw"]); hs.merge("B2","I2")
+    for c in range(3,10): hs.blank(2,c, XF["subw"])
+    hd=["Frecuencia","Sprint","Inicio","Cierre","Estado","Tareas (compl./plan)","¿Se completó?","Motivo / Comentario (por qué)"]
+    for i,h in enumerate(hd): hs.t(4,2+i,h, XF["tblhdr"])
+    HR0=5; NSP=10
+    cf_hs=""; prio=10
+    r=HR0
+    for (fq,ini,ln) in [("Semanal",SEM_INI,SEM_LEN),("Quincenal",QUI_INI,QUI_LEN),("Mensual",MEN_INI,MEN_LEN)]:
+        bstart=r
+        for n in range(1,NSP+1):
+            hs.t(r,2, fq, XF["textc_n"])
+            hs.n(r,3, n, XF["textc_n"])
+            hs.f(r,4, f'{ini}+({n}-1)*{ln}', XF["date_n"])
+            hs.f(r,5, f'{ini}+{n}*{ln}-1', XF["date_n"])
+            plan=f'COUNTIFS({DM}$AO$7:$AO$200,"{fq}",{DM}$AR$7:$AR$200,{n})'
+            comp=f'COUNTIFS({DM}$AO$7:$AO$200,"{fq}",{DM}$AR$7:$AR$200,{n},{DM}$J$7:$J$200,"Completado")'
+            hs.f(r,6, f'IF({plan}=0,IF($E{r}<TODAY(),"Cerrado · sin tareas","Próximo · sin tareas"),IF($E{r}<TODAY(),"Cerrado",IF($D{r}<=TODAY(),"En curso","Próximo")))', XF["textc_n"])
+            hs.f(r,7, f'{comp}&" / "&{plan}', XF["textc_n"])
+            hs.blank(r,8, XF["input"])      # ¿Se completó? (editable, dropdown)
+            hs.blank(r,9, XF["input_l"])    # Motivo (editable)
+            r+=1
+        bend_b=r-1
+        fcer=esc(f'ISNUMBER(SEARCH("Cerrado",$F{bstart}))'); fenc=esc(f'$F{bstart}="En curso"')
+        fsi=esc(f'$H{bstart}="Sí"'); fno=esc(f'$H{bstart}="No"'); fpar=esc(f'$H{bstart}="Parcial"')
+        cf_hs+=(f'<conditionalFormatting sqref="F{bstart}:F{bend_b}">'
+                f'<cfRule type="expression" dxfId="{DX["band"]}" priority="{prio}"><formula>{fcer}</formula></cfRule>'
+                f'<cfRule type="expression" dxfId="{DX["modhdr"]}" priority="{prio+1}"><formula>{fenc}</formula></cfRule>'
+                '</conditionalFormatting>'
+                f'<conditionalFormatting sqref="H{bstart}:H{bend_b}">'
+                f'<cfRule type="expression" dxfId="{DX["done"]}" priority="{prio+2}"><formula>{fsi}</formula></cfRule>'
+                f'<cfRule type="expression" dxfId="{DX["red"]}" priority="{prio+3}"><formula>{fno}</formula></cfRule>'
+                f'<cfRule type="expression" dxfId="{DX["amber"]}" priority="{prio+4}"><formula>{fpar}</formula></cfRule>'
+                '</conditionalFormatting>')
+        prio+=5
+    hbend=r-1
+    dv_hs=(f'<dataValidations count="1">'
+           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="H{HR0}:H{hbend}"><formula1>"Sí,No,Parcial"</formula1></dataValidation>'
+           f'</dataValidations>')
+    svh='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+    sheet10=render_sheet(hs, f"A1:I{hbend}", cf=cf_hs, sheetviews=svh, rowheights={1:26,2:38}, dv=dv_hs)
+    wr("xl/worksheets/sheet10.xml", sheet10)
+
+    # ---------- plumbing: workbook.xml (6 hojas nuevas) ----------
     wb=rd("xl/workbook.xml")
     new_sheets=('<sheet name="Backlog General" sheetId="20" r:id="rId16"/>'
                 '<sheet name="Sprints" sheetId="19" r:id="rId15"/>'
+                '<sheet name="Historial de Sprints" sheetId="21" r:id="rId17"/>'
                 '<sheet name="Tablero" sheetId="15" r:id="rId12"/>'
                 '<sheet name="Entregas Próximas" sheetId="16" r:id="rId13"/>'
                 '<sheet name="_Datos" sheetId="18" state="hidden" r:id="rId14"/>')
@@ -660,14 +713,15 @@ def build_all():
          '<Relationship Id="rId13" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet6.xml"/>'
          '<Relationship Id="rId14" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet7.xml"/>'
          '<Relationship Id="rId15" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet8.xml"/>'
-         '<Relationship Id="rId16" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet9.xml"/>')
+         '<Relationship Id="rId16" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet9.xml"/>'
+         '<Relationship Id="rId17" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet10.xml"/>')
     rels=rels.replace("</Relationships>", add+"</Relationships>",1)
     wr("xl/_rels/workbook.xml.rels", rels)
 
     # [Content_Types].xml: quitar calcChain, añadir sheets 5-9
     ct=rd("[Content_Types].xml")
     ct=re.sub(r'<Override PartName="/xl/calcChain.xml"[^>]*/>','',ct)
-    ov="".join(f'<Override PartName="/xl/worksheets/sheet{n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for n in (5,6,7,8,9))
+    ov="".join(f'<Override PartName="/xl/worksheets/sheet{n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for n in (5,6,7,8,9,10))
     ct=ct.replace("</Types>", ov+"</Types>",1)
     wr("[Content_Types].xml", ct)
 
