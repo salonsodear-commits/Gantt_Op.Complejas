@@ -570,9 +570,9 @@ def build_all():
         rr=5+i
         sp.f(rr,9, f"{SRC}!$G${a}", XF["textl_n"]); sp.t(rr,10, fq, XF["input"])
     # --- 3 tableros por frecuencia (cada uno ordenado por su sprint) ---
-    boards=[("TABLERO SEMANAL","$BB",15),("TABLERO QUINCENAL","$BC",30),("TABLERO MENSUAL","$BD",45)]
-    NB=12; cf_sp=""; prio=10
-    for title,key,ds in boards:
+    boards=[("TABLERO SEMANAL","$BB",15,20),("TABLERO QUINCENAL","$BC",38,10),("TABLERO MENSUAL","$BD",51,6)]
+    cf_sp=""; prio=10
+    for title,key,ds,NB in boards:
         sp.t(ds-2,2,title+"  (ordenado por Sprint)", XF["section"]); sp.merge(f"B{ds-2}",f"F{ds-2}"); [sp.blank(ds-2,c,XF["section"]) for c in (3,4,5,6)]
         for i,h in enumerate(["Sprint","Proyecto","Subtarea","Estado","Mora (d)"]): sp.t(ds-1,2+i,h, XF["tblhdr"])
         for kk in range(NB):
@@ -594,7 +594,7 @@ def build_all():
                 '</conditionalFormatting>'
                 f'<conditionalFormatting sqref="B{ds}:F{de}"><cfRule type="expression" dxfId="{DX["border"]}" priority="{prio+4}"><formula>{fb}</formula></cfRule></conditionalFormatting>')
         prio+=5
-    de=boards[-1][2]+NB-1
+    de=boards[-1][2]+boards[-1][3]-1
     dv_sp=(f'<dataValidations count="1">'
            f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="J5:J12"><formula1>"Semanal,Quincenal,Mensual"</formula1></dataValidation>'
            f'</dataValidations>')
