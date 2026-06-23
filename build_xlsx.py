@@ -327,7 +327,7 @@ def build_all():
            "Comentario","Aux","ClavePri","urg","atr","rsk","AlertRaw","Frecuencia","FreqLen",
            "FreqStart","SprPlanF","SprActF","EstadoIn","AccionIn","SprVigF","CierreF","MoraF",
            "EstadoBoard","SprKeyF","Nuevo","keySem","keyQui","keyMen",
-           "MotivoVal","MotivoFull","Completada","keyHist"]
+           "MotivoVal","MotivoFull","Completada","keyHist","AvanceSprint"]
     for i,h in enumerate(heads): d.t(6,i+1,h, XF["tblhdr"])
     for r in range(DATA_FIRST, DATA_LAST+1):
         d.f(r,1,  "ROW()", XF["datc"])
@@ -389,13 +389,14 @@ def build_all():
         d.f(r,58, f'IF($C{r},IF($BE{r}="","",$BE{r})&IF(AND($BE{r}<>"",$AH{r}<>"")," · ","")&IF($AH{r}="","",$AH{r}),"")', XF["dattxt"])  # MotivoFull = validación + detalle libre
         d.f(r,59, f'IF($C{r},IF($J{r}="Completado","Sí","No"),"")', XF["dattxt"])              # Completada (Sí/No)
         d.f(r,60, f'IF(AND($C{r},ISNUMBER($AR{r})),IF($AO{r}="Semanal",1,IF($AO{r}="Quincenal",2,3))*1000000000+$AR{r}*100000+ROW(),"")', XF["datc"])  # keyHist (orden Frecuencia>Sprint plan>fila)
+        d.f(r,61, f'IF($C{r},IF($AT{r}="Completo",1,IF($AU{r}="Cancelado","",$I{r})),"")', XF["datc"])  # AvanceSprint: avance vinculado al sprint (Completo=100%; Cancelado no cuenta; resto=avance parcial)
     # listado dinámico de sprints VIGENTES: solo aparecen los que EXISTEN
     for r in range(7,37):                     # candidatos 1..30
         d.f(r,16, "ROW()-6", XF["datc"])
         d.f(r,17, f'IF(COUNTIF($AD$7:$AD$200,$P{r})>0,$P{r},"")', XF["datc"])
     d.n(37,16,9999, XF["datc"])               # candidato "(Sin sprint)"
     d.f(37,17, 'IF(COUNTIF($AD$7:$AD$200,9999)>0,9999,"")', XF["datc"])
-    sheet7 = render_sheet(d, f"A1:BH{DATA_LAST}")
+    sheet7 = render_sheet(d, f"A1:BI{DATA_LAST}")
     wr("xl/worksheets/sheet7.xml", sheet7)
 
     # ---------- sheet6: Entregas Próximas (priorizada) ----------
@@ -625,7 +626,7 @@ def build_all():
              '<col min="13" max="13" width="11"/><col min="14" max="14" width="10"/></cols>')
     bg.t(1,2,"BACKLOG GENERAL — ejecución de sprints (por subtarea)", XF["title"]); bg.merge("B1","N1")
     for c in range(3,15): bg.blank(1,c, XF["title"])
-    bg.t(2,2,'Hoja de EJECUCIÓN (la planificación, fechas y notas viven en \'Proyecto Datos (OKR´s)\'). El "% Avance" se toma solo de la 1ª hoja. Estado = "Completo" / "No se realizó". Si NO se realizó, Acción: "Pasa al siguiente" / "Baja prioridad" (no cuenta mora) / "Cancelado", e indique el "Motivo" (lista) y un "Comentario" libre — quedan en el Historial. El "SPRINT ACTUAL" es el mismo nº que en Sprints e Historial. Mora en días hábiles.', XF["subw"]); bg.merge("B2","N2")
+    bg.t(2,2,'Hoja de EJECUCIÓN (la planificación, fechas y notas viven en \'Proyecto Datos (OKR´s)\'). El "% Avance" se VINCULA al sprint: una tarea con Estado "Completo" cuenta 100%; el resto, su avance parcial del Gantt; en la fila de proyecto es el promedio de sus subtareas (las "Canceladas" no cuentan). Estado = "Completo" / "No se realizó". Si NO se realizó, Acción: "Pasa al siguiente" / "Baja prioridad" (no cuenta mora) / "Cancelado", e indique el "Motivo" (lista) y un "Comentario" libre — quedan en el Historial. El "SPRINT ACTUAL" es el mismo nº que en Sprints e Historial. Mora en días hábiles.', XF["subw"]); bg.merge("B2","N2")
     for c in range(3,15): bg.blank(2,c, XF["subw"])
     th=["ID","Subtarea / Proyecto","Frecuencia","% Avance","Sprint inicial","Estado","Acción si no se realizó","SPRINT ACTUAL","Motivo (por qué)","Comentario / Detalle","Mora (h)","Sol. Sprint","Nuevo"]
     for i,h in enumerate(th): bg.t(6,2+i,h, XF["tblhdr"])
@@ -634,7 +635,7 @@ def build_all():
         bg.f(r,2, f'IF({DM}$C{r},{DM}$O{r},"")', XF["textc_n"])
         bg.f(r,3, f'IF({DM}$C{r},{DM}$F{r},IF({DM}$B{r},{SRC}!$G{r},""))', XF["textl_n"])  # subtarea o título de proyecto (fase)
         bg.f(r,4, f'IF({DM}$C{r},{DM}$AO{r},"")', XF["textc_n"])      # Frecuencia
-        bg.f(r,5, f'IF({DM}$C{r},{DM}$I{r},IF({DM}$B{r},IFERROR(AVERAGEIF({DM}$D$7:$D$200,{SRC}!$G{r},{DM}$I$7:$I$200),""),""))', XF["pct_n"])  # % Avance (subtarea; en proyecto = promedio de subtareas)
+        bg.f(r,5, f'IF({DM}$C{r},{DM}$BI{r},IF({DM}$B{r},IFERROR(AVERAGEIF({DM}$D$7:$D$200,{SRC}!$G{r},{DM}$BI$7:$BI$200),""),""))', XF["pct_n"])  # % Avance VINCULADO AL SPRINT (subtarea: Completo=100%/parcial; proyecto = promedio de subtareas)
         bg.f(r,6, f'IF({DM}$C{r},IF(ISNUMBER({DM}$AR{r}),{DM}$AR{r},"(Sin fecha)"),"")', XF["textc_n"])      # Sprint inicial
         bg.blank(r,7, XF["textc_n"])    # G: Estado (input)
         bg.blank(r,8, XF["textl_n"])    # H: Acción (input)
