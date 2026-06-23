@@ -149,6 +149,7 @@ def build_styles():
     # variantes SIN borde (tablas con borde dinámico vía formato condicional)
     addxf("textc_n", font=F["norm"], halign="center")
     addxf("textl_n", font=F["norm"], halign="left", wrap=True)
+    addxf("pct_n", numFmt=9, font=F["norm"], halign="center")
     addxf("date_n",  numFmt=173, font=F["norm"], halign="center")
     addxf("pct_n",   numFmt=9,   font=F["norm"], halign="center")
     addxf("days_n",  numFmt=174, font=F["norm"], halign="center")
@@ -233,6 +234,7 @@ def build_all():
     PFREQ = SP+"$I$5:$J$12"            # tabla Proyecto -> Frecuencia (editable)
     SPR_D1, SPR_LEN = SP+"$C$5", SP+"$D$5"   # base SEMANAL común: Sprint semanal 1 (viernes presentación) y días por semana
     WPP_TBL = SP+"$B$9:$C$11"          # tabla Frecuencia -> semanas por sprint (Semanal 1, Quincenal 2, Mensual 4) -> alinea cierres a la grilla semanal
+    HOLIDAYS = SP+"$L$5:$L$40"          # feriados (editable). Sáb/dom + estos días NO se trabajan (mora en días hábiles)
 
     # ---------- sheet1: reubicar "Tablero Forecast" DENTRO del bloque de Tableros (25%) + formato condicional ----------
     s1 = rd("xl/worksheets/sheet1.xml")
@@ -324,7 +326,8 @@ def build_all():
            "Bloqueo","Score","Prioridad","Alertas","SprVigente","SprVigKey","Movido","FechaMov",
            "Comentario","Aux","ClavePri","urg","atr","rsk","AlertRaw","Frecuencia","FreqLen",
            "FreqStart","SprPlanF","SprActF","EstadoIn","AccionIn","SprVigF","CierreF","MoraF",
-           "EstadoBoard","SprKeyF","Nuevo","keySem","keyQui","keyMen"]
+           "EstadoBoard","SprKeyF","Nuevo","keySem","keyQui","keyMen",
+           "MotivoVal","MotivoFull","Completada","keyHist"]
     for i,h in enumerate(heads): d.t(6,i+1,h, XF["tblhdr"])
     for r in range(DATA_FIRST, DATA_LAST+1):
         d.f(r,1,  "ROW()", XF["datc"])
@@ -359,7 +362,7 @@ def build_all():
         d.f(r,31, f'IF($C{r},$AZ{r},"")', XF["datc"])                                        # SprVigKey = "Frecuencia · S#"
         d.f(r,32, f'IF($C{r},$AV{r}<>$AR{r},FALSE)', XF["datc"])                              # Movido?
         d.f(r,33, f'IF($C{r},IF($AV{r}<>$AR{r},$AW{r},""),"")', XF["datc"])                   # FechaMov = cierre del sprint planificado
-        d.f(r,34, f'IF($C{r},{BL}$L{r},"")', XF["dattxt"])                                    # Justificación/Comentario (del Backlog)
+        d.f(r,34, f'IF($C{r},IF(ISBLANK({BL}$K{r}),"",{BL}$K{r}),"")', XF["dattxt"])          # Comentario/Detalle libre (del Backlog col K)
         d.f(r,35, f'IF($C{r},$AV{r}*100000+ROW(),"")', XF["datc"])                            # aux
         d.f(r,36, f'IF(AND($C{r},ISNUMBER($H{r})),$AA{r}*1000000-MEDIAN(-9999,$K{r},9999)*100+(300-ROW()),"")', XF["datc"])  # ClavePri
         d.f(r,37, f'IF($C{r},IF($J{r}="Completado",0,IF($K{r}<0,1,IF($K{r}<=3,0.9,IF($K{r}<=7,0.7,IF($K{r}<=14,0.45,0.2))))),"")', XF["datc"])  # urg
@@ -375,20 +378,24 @@ def build_all():
         d.f(r,47, f'IF($C{r},{BL}$H{r},"")', XF["dattxt"])                                    # AccionIn (Backlog: Pasa/Baja/Cancelado)
         d.f(r,48, f'IF(AND($C{r},ISNUMBER($AR{r})),IF(OR($AT{r}="Completo",$AU{r}="Cancelado",$AU{r}="Baja prioridad"),$AR{r},IF($AU{r}="Pasa al siguiente",MAX($AR{r}+1,$AS{r}),MAX($AR{r},$AS{r}))),"")', XF["datc"])  # SprintVigFreq
         d.f(r,49, f'IF(AND($C{r},ISNUMBER($AR{r})),$AQ{r}+$AR{r}*$AP{r}*{SPR_LEN}-{SPR_LEN},"")', XF["datc"])                         # CierrePlanFreq
-        d.f(r,50, f'IF($C{r},IF(OR($AT{r}="Completo",$AU{r}="Cancelado",$AU{r}="Baja prioridad",NOT(ISNUMBER($AW{r}))),0,MAX(0,TODAY()-$AW{r})),"")', XF["datc"])  # MoraFreq (no cuenta si baja prioridad/cancelado/completo)
+        d.f(r,50, f'IF($C{r},IF(OR($AT{r}="Completo",$AU{r}="Cancelado",$AU{r}="Baja prioridad",NOT(ISNUMBER($AW{r}))),0,IF(TODAY()>$AW{r},NETWORKDAYS($AW{r},TODAY(),{HOLIDAYS})-1,0)),"")', XF["datc"])  # MoraFreq en DÍAS HÁBILES (sáb/dom+feriados no cuentan)
         d.f(r,51, f'IF($C{r},IF(NOT(ISNUMBER($AR{r})),"Sin fecha",IF($AT{r}="Completo","Completo",IF($AU{r}="Cancelado","Cancelado",IF($AU{r}="Baja prioridad","Baja prioridad",IF($AX{r}>0,"Vencida","Pendiente"))))),"")', XF["dattxt"])  # EstadoBoard
         d.f(r,52, f'IF($C{r},IF(ISNUMBER($AV{r}),$AO{r}&" · S"&$AV{r},"(Sin fecha)"),"")', XF["dattxt"])                         # SprintKeyFreq
         d.f(r,53, f'IF($C{r},IF(AND(ISNUMBER({BL}$M{r}),{BL}$M{r}=$AS{r}),"Nuevo S"&{BL}$M{r},""),"")', XF["datc"])  # Nuevo (solicitado en sprint = sprint actual de su frecuencia)
         d.f(r,54, f'IF(AND($C{r},$AO{r}="Semanal",ISNUMBER($AV{r})),$AV{r}*100000+ROW(),"")', XF["datc"])      # keySem
         d.f(r,55, f'IF(AND($C{r},$AO{r}="Quincenal",ISNUMBER($AV{r})),$AV{r}*100000+ROW(),"")', XF["datc"])    # keyQui
         d.f(r,56, f'IF(AND($C{r},$AO{r}="Mensual",ISNUMBER($AV{r})),$AV{r}*100000+ROW(),"")', XF["datc"])      # keyMen
+        d.f(r,57, f'IF($C{r},IF(ISBLANK({BL}$J{r}),"",{BL}$J{r}),"")', XF["dattxt"])           # MotivoVal (Backlog col J, por validación)
+        d.f(r,58, f'IF($C{r},IF($BE{r}="","",$BE{r})&IF(AND($BE{r}<>"",$AH{r}<>"")," · ","")&IF($AH{r}="","",$AH{r}),"")', XF["dattxt"])  # MotivoFull = validación + detalle libre
+        d.f(r,59, f'IF($C{r},IF($J{r}="Completado","Sí","No"),"")', XF["dattxt"])              # Completada (Sí/No)
+        d.f(r,60, f'IF(AND($C{r},ISNUMBER($AR{r})),IF($AO{r}="Semanal",1,IF($AO{r}="Quincenal",2,3))*1000000000+$AR{r}*100000+ROW(),"")', XF["datc"])  # keyHist (orden Frecuencia>Sprint plan>fila)
     # listado dinámico de sprints VIGENTES: solo aparecen los que EXISTEN
     for r in range(7,37):                     # candidatos 1..30
         d.f(r,16, "ROW()-6", XF["datc"])
         d.f(r,17, f'IF(COUNTIF($AD$7:$AD$200,$P{r})>0,$P{r},"")', XF["datc"])
     d.n(37,16,9999, XF["datc"])               # candidato "(Sin sprint)"
     d.f(37,17, 'IF(COUNTIF($AD$7:$AD$200,9999)>0,9999,"")', XF["datc"])
-    sheet7 = render_sheet(d, f"A1:BD{DATA_LAST}")
+    sheet7 = render_sheet(d, f"A1:BH{DATA_LAST}")
     wr("xl/worksheets/sheet7.xml", sheet7)
 
     # ---------- sheet6: Entregas Próximas (priorizada) ----------
@@ -542,7 +549,7 @@ def build_all():
              '<col min="3" max="3" width="32"/><col min="4" max="4" width="46"/>'
              '<col min="5" max="5" width="18"/><col min="6" max="6" width="10"/>'
              '<col min="7" max="7" width="9" hidden="1"/><col min="9" max="9" width="32"/>'
-             '<col min="10" max="10" width="13"/></cols>')
+             '<col min="10" max="10" width="13"/><col min="12" max="12" width="16"/></cols>')
     sp.t(1,2,"SPRINTS — por frecuencia, alineados a una grilla semanal común", XF["title"]); sp.merge("B1","F1")
     for c in range(3,7): sp.blank(1,c, XF["title"])
     sp.t(2,2,"Cada frecuencia tiene SUS sprints (Semanal S1,S2…; Quincenal S1,S2…; Mensual S1,S2…), pero todos cierran sobre los MISMOS viernes. Base: Sprint semanal 1 presenta el 19/06. Así Quincenal S1 cierra el mismo viernes que Semanal S2 (26/06); Quincenal S2 = Semanal S4 (10/07); Mensual S1 = Semanal S4. Cada tarea cae en el sprint de SU frecuencia según su fecha.", XF["subw"]); sp.merge("B2","F2")
@@ -569,6 +576,11 @@ def build_all():
     for i,(a,fq) in enumerate(zip(anchors,deff)):
         rr=5+i
         sp.f(rr,9, f"{SRC}!$G${a}", XF["textl_n"]); sp.t(rr,10, fq, XF["input"])
+    # --- config: feriados (no laborables; sáb/dom siempre no laborables) ---
+    sp.t(3,12,"FERIADOS — no se trabaja (+ sáb/dom)", XF["section"]); sp.merge("L3","L3")
+    sp.t(4,12,"Fecha (editable)", XF["tblhdr"])
+    for i,(mm,dd) in enumerate([(7,9),(8,17),(10,12),(12,8),(12,25)]):  # feriados nacionales AR (editar/agregar)
+        sp.f(5+i,12, f"DATE(2026,{mm},{dd})", XF["input_date"])
     # --- 3 tableros por frecuencia (cada uno ordenado por su sprint) ---
     boards=[("TABLERO SEMANAL","$BB",15,20),("TABLERO QUINCENAL","$BC",38,10),("TABLERO MENSUAL","$BD",51,6)]
     cf_sp=""; prio=10
@@ -599,37 +611,37 @@ def build_all():
            f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="J5:J12"><formula1>"Semanal,Quincenal,Mensual"</formula1></dataValidation>'
            f'</dataValidations>')
     svs='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
-    sheet8=render_sheet(sp, f"A1:J{de}", cf=cf_sp, sheetviews=svs, rowheights={1:26,2:46}, dv=dv_sp)
+    sheet8=render_sheet(sp, f"A1:L{de}", cf=cf_sp, sheetviews=svs, rowheights={1:26,2:46}, dv=dv_sp)
     wr("xl/worksheets/sheet8.xml", sheet8)
 
     # ---------- sheet9: Backlog General (OKRs por proyecto + estado/acción/justificación) ----------
     bg=Sheet()
     bg.cols=('<cols><col min="1" max="1" width="2.5"/><col min="2" max="2" width="7"/>'
              '<col min="3" max="3" width="44"/><col min="4" max="4" width="11"/>'
-             '<col min="5" max="5" width="12"/><col min="6" max="6" width="11"/>'
+             '<col min="5" max="5" width="10"/><col min="6" max="6" width="11"/>'
              '<col min="7" max="7" width="15"/><col min="8" max="8" width="18"/>'
-             '<col min="9" max="9" width="12"/><col min="10" max="10" width="8"/>'
-             '<col min="11" max="11" width="30"/><col min="12" max="12" width="30"/>'
-             '<col min="13" max="13" width="12"/><col min="14" max="14" width="12"/></cols>')
-    bg.t(1,2,"BACKLOG GENERAL — mis OKRs por proyecto", XF["title"]); bg.merge("B1","N1")
+             '<col min="9" max="9" width="14"/><col min="10" max="10" width="22"/>'
+             '<col min="11" max="11" width="34"/><col min="12" max="12" width="8"/>'
+             '<col min="13" max="13" width="11"/><col min="14" max="14" width="10"/></cols>')
+    bg.t(1,2,"BACKLOG GENERAL — ejecución de sprints (por subtarea)", XF["title"]); bg.merge("B1","N1")
     for c in range(3,15): bg.blank(1,c, XF["title"])
-    bg.t(2,2,'Estado = "Completo" o "No se realizó". Si NO se realizó, Acción: "Pasa al siguiente" / "Baja prioridad" (sigue pendiente y NO cuenta mora) / "Cancelado". El "Comentario (Gantt)" trae las notas de la 1ª hoja; agregue su "Justificación" libre. "Sol. en Sprint" marca en qué sprint fue solicitada (deja de ser "Nuevo" al avanzar de sprint). El "SPRINT ACTUAL" de cada tarea es el MISMO número que figura en la hoja Sprints.', XF["subw"]); bg.merge("B2","N2")
+    bg.t(2,2,'Hoja de EJECUCIÓN (la planificación, fechas y notas viven en \'Proyecto Datos (OKR´s)\'). El "% Avance" se toma solo de la 1ª hoja. Estado = "Completo" / "No se realizó". Si NO se realizó, Acción: "Pasa al siguiente" / "Baja prioridad" (no cuenta mora) / "Cancelado", e indique el "Motivo" (lista) y un "Comentario" libre — quedan en el Historial. El "SPRINT ACTUAL" es el mismo nº que en Sprints e Historial. Mora en días hábiles.', XF["subw"]); bg.merge("B2","N2")
     for c in range(3,15): bg.blank(2,c, XF["subw"])
-    th=["ID","Subtarea / Proyecto","Frecuencia","Fecha obj.","Sprint inicial","Estado","Acción si no se realizó","SPRINT ACTUAL","Mora (d)","Comentario (Gantt)","Justificación / Comentario","Sol. en Sprint","Nuevo"]
+    th=["ID","Subtarea / Proyecto","Frecuencia","% Avance","Sprint inicial","Estado","Acción si no se realizó","SPRINT ACTUAL","Motivo (por qué)","Comentario / Detalle","Mora (h)","Sol. Sprint","Nuevo"]
     for i,h in enumerate(th): bg.t(6,2+i,h, XF["tblhdr"])
     BR0=7
     for r in range(BR0, DATA_LAST+1):
         bg.f(r,2, f'IF({DM}$C{r},{DM}$O{r},"")', XF["textc_n"])
         bg.f(r,3, f'IF({DM}$C{r},{DM}$F{r},IF({DM}$B{r},{SRC}!$G{r},""))', XF["textl_n"])  # subtarea o título de proyecto (fase)
         bg.f(r,4, f'IF({DM}$C{r},{DM}$AO{r},"")', XF["textc_n"])      # Frecuencia
-        bg.f(r,5, f'IF({DM}$C{r},{DM}$H{r},"")', XF["date_n"])         # Fecha objetivo
-        bg.f(r,6, f'IF({DM}$C{r},IF(ISNUMBER({DM}$AR{r}),{DM}$AR{r},"(Sin fecha)"),"")', XF["textc_n"])      # Sprint planificado
+        bg.f(r,5, f'IF({DM}$C{r},{DM}$I{r},IF({DM}$B{r},IFERROR(AVERAGEIF({DM}$D$7:$D$200,{SRC}!$G{r},{DM}$I$7:$I$200),""),""))', XF["pct_n"])  # % Avance (subtarea; en proyecto = promedio de subtareas)
+        bg.f(r,6, f'IF({DM}$C{r},IF(ISNUMBER({DM}$AR{r}),{DM}$AR{r},"(Sin fecha)"),"")', XF["textc_n"])      # Sprint inicial
         bg.blank(r,7, XF["textc_n"])    # G: Estado (input)
         bg.blank(r,8, XF["textl_n"])    # H: Acción (input)
-        bg.f(r,9, f'IF({DM}$C{r},IF(ISNUMBER({DM}$AV{r}),{DM}$AZ{r},"(Sin fecha)"),"")', XF["textc_n"])      # Sprint vigente (Frecuencia · S#, igual que en Sprints)
-        bg.f(r,10, f'IF({DM}$C{r},{DM}$AX{r},"")', XF["days_n"])       # Mora
-        bg.f(r,11, f'IF({DM}$C{r},IF({SRC}!$C{r}="","",{SRC}!$C{r}),"")', XF["textl_n"])  # K: Comentario del Gantt (1ª hoja)
-        bg.blank(r,12, XF["textl_n"])   # L: Justificación / Comentario (input)
+        bg.f(r,9, f'IF({DM}$C{r},IF(ISNUMBER({DM}$AV{r}),{DM}$AZ{r},"(Sin fecha)"),"")', XF["textc_n"])      # SPRINT ACTUAL (Frecuencia · S#)
+        bg.blank(r,10, XF["textc_n"])   # J: Motivo (input, validación)
+        bg.blank(r,11, XF["textl_n"])   # K: Comentario / Detalle libre (input)
+        bg.f(r,12, f'IF({DM}$C{r},{DM}$AX{r},"")', XF["days_n"])       # Mora (días hábiles)
         if r in (49,50,51): bg.n(r,13,3, XF["input"])   # Forecast: solicitado en el sprint semanal actual (3)
         else: bg.blank(r,13, XF["input"])               # M: Sol. en Sprint (input)
         bg.f(r,14, f'IF({DM}$C{r},{DM}$BA{r},"")', XF["textc_n"])     # N: Nuevo (computado)
@@ -637,66 +649,59 @@ def build_all():
     fb=esc(f'$B{BR0}<>""'); fph=esc(f'{DM}$B{BR0}'); fnew=esc(f'$N{BR0}<>""')
     fco=esc(f'$G{BR0}="Completo"'); fno=esc(f'$G{BR0}="No se realizó"')
     cf_bg=(
+      f'<conditionalFormatting sqref="E{BR0}:E{bend}"><cfRule type="dataBar" priority="10"><dataBar><cfvo type="num" val="0"/><cfvo type="num" val="1"/><color rgb="FF63C384"/></dataBar></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="B{BR0}:N{bend}"><cfRule type="expression" dxfId="{DX["modhdr"]}" priority="20"><formula>{fph}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="G{BR0}:H{bend}"><cfRule type="expression" dxfId="{DX["inputhl"]}" priority="21"><formula>{fb}</formula></cfRule></conditionalFormatting>'
-      f'<conditionalFormatting sqref="L{BR0}:M{bend}"><cfRule type="expression" dxfId="{DX["inputhl"]}" priority="22"><formula>{fb}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="J{BR0}:K{bend}"><cfRule type="expression" dxfId="{DX["inputhl"]}" priority="22"><formula>{fb}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="G{BR0}:G{bend}"><cfRule type="expression" dxfId="{DX["done"]}" priority="23"><formula>{fco}</formula></cfRule><cfRule type="expression" dxfId="{DX["red"]}" priority="24"><formula>{fno}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="N{BR0}:N{bend}"><cfRule type="expression" dxfId="{DX["amber"]}" priority="25"><formula>{fnew}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="B{BR0}:N{bend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="40"><formula>{fb}</formula></cfRule></conditionalFormatting>'
     )
-    dv_bg=(f'<dataValidations count="3">'
+    motivos="Falta de tiempo,Dependencia externa,Bloqueo técnico,Esperando información,Repriorización,Cambio de alcance,Otro"
+    dv_bg=(f'<dataValidations count="4">'
            f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="G{BR0}:G{bend}"><formula1>"En curso,Completo,No se realizó"</formula1></dataValidation>'
            f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="H{BR0}:H{bend}"><formula1>"Pasa al siguiente,Baja prioridad,Cancelado"</formula1></dataValidation>'
+           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="J{BR0}:J{bend}"><formula1>"{motivos}"</formula1></dataValidation>'
            f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="M{BR0}:M{bend}"><formula1>"1,2,3,4,5,6,7,8,9,10,11,12"</formula1></dataValidation>'
            f'</dataValidations>')
     svb='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="G7" sqref="G7"/></sheetView></sheetViews>'
-    sheet9=render_sheet(bg, f"A1:N{bend}", cf=cf_bg, sheetviews=svb, rowheights={1:26,2:34}, dv=dv_bg)
+    sheet9=render_sheet(bg, f"A1:N{bend}", cf=cf_bg, sheetviews=svb, rowheights={1:26,2:40}, dv=dv_bg)
     wr("xl/worksheets/sheet9.xml", sheet9)
 
-    # ---------- sheet10: Historial de Sprints (por frecuencia, acumulativo + editable) ----------
+    # ---------- sheet10: Historial de Sprints (POR TAREA, trazabilidad) ----------
     hs=Sheet()
     hs.cols=('<cols><col min="1" max="1" width="2.5"/><col min="2" max="2" width="12"/>'
-             '<col min="3" max="3" width="8"/><col min="4" max="4" width="14"/>'
-             '<col min="5" max="5" width="16"/><col min="6" max="6" width="20"/>'
-             '<col min="7" max="7" width="18"/><col min="8" max="8" width="14"/>'
-             '<col min="9" max="9" width="60"/></cols>')
-    hs.t(1,2,"HISTORIAL DE SPRINTS — por frecuencia, acumulativo y editable", XF["title"]); hs.merge("B1","I1")
-    for c in range(3,10): hs.blank(1,c, XF["title"])
-    hs.t(2,2,"Cada frecuencia con SUS sprints, pero todos cierran sobre los mismos viernes (Quincenal S1 = Semanal S2 = 26/06; Mensual S1 = Semanal S4 = 10/07). Fechas del calendario (hoja Sprints). 'Tareas (compl./plan)' automático. '¿Se completó?' y 'Motivo' EDITABLES y se conservan. Un sprint sin tareas se marca 'sin tareas' — no se inventan.", XF["subw"]); hs.merge("B2","I2")
-    for c in range(3,10): hs.blank(2,c, XF["subw"])
-    hd=["Frecuencia","Sprint","Inicio (lun)","Presentación (vie)","Estado","Tareas (compl./plan)","¿Se completó?","Motivo / Comentario (por qué)"]
-    for i,h in enumerate(hd): hs.t(4,2+i,h, XF["tblhdr"])
-    HR0=5; r=HR0
-    for (fq, wcell, nsp) in [("Semanal", SP+"$C$9", 12), ("Quincenal", SP+"$C$10", 6), ("Mensual", SP+"$C$11", 3)]:
-        for n in range(1,nsp+1):
-            hs.t(r,2, fq, XF["textc_n"])
-            hs.n(r,3, n, XF["textc_n"])
-            hs.f(r,4, f'{SPR_D1}+({n}*{wcell}-1)*{SPR_LEN}-4', XF["date_n"])     # inicio (lunes = viernes-4)
-            hs.f(r,5, f'{SPR_D1}+({n}*{wcell}-1)*{SPR_LEN}', XF["date_n"])       # presentación (viernes, alineada a la grilla)
-            plan=f'COUNTIFS({DM}$AO$7:$AO$200,"{fq}",{DM}$AR$7:$AR$200,{n})'
-            comp=f'COUNTIFS({DM}$AO$7:$AO$200,"{fq}",{DM}$AR$7:$AR$200,{n},{DM}$J$7:$J$200,"Completado")'
-            hs.f(r,6, f'IF({plan}=0,IF($E{r}<TODAY(),"Cerrado · sin tareas","Próximo · sin tareas"),IF($E{r}<TODAY(),"Cerrado",IF($D{r}<=TODAY(),"En curso","Próximo")))', XF["textc_n"])
-            hs.f(r,7, f'{comp}&" / "&{plan}', XF["textc_n"])
-            hs.blank(r,8, XF["input"])      # ¿Se completó? (editable, dropdown)
-            hs.blank(r,9, XF["input_l"])    # Motivo (editable)
-            r+=1
-    hbend=r-1
-    fcer=esc(f'ISNUMBER(SEARCH("Cerrado",$F{HR0}))'); fenc=esc(f'$F{HR0}="En curso"')
-    fsi=esc(f'$H{HR0}="Sí"'); fno=esc(f'$H{HR0}="No"'); fpar=esc(f'$H{HR0}="Parcial"')
-    cf_hs=(f'<conditionalFormatting sqref="F{HR0}:F{hbend}">'
-            f'<cfRule type="expression" dxfId="{DX["band"]}" priority="10"><formula>{fcer}</formula></cfRule>'
-            f'<cfRule type="expression" dxfId="{DX["modhdr"]}" priority="11"><formula>{fenc}</formula></cfRule>'
+             '<col min="3" max="3" width="8"/><col min="4" max="4" width="16"/>'
+             '<col min="5" max="5" width="44"/><col min="6" max="6" width="18"/>'
+             '<col min="7" max="7" width="14"/><col min="8" max="8" width="46"/>'
+             '<col min="9" max="9" width="9" hidden="1"/></cols>')
+    hs.t(1,2,"HISTORIAL DE SPRINTS — por tarea (trazabilidad)", XF["title"]); hs.merge("B1","H1")
+    for c in range(3,9): hs.blank(1,c, XF["title"])
+    hs.t(2,2,"Cada subtarea en su SPRINT PLANIFICADO: si se completó o no y por qué. Trazabilidad: aunque una tarea pase a otro sprint, queda registrada acá en su sprint original con su motivo. '¿Completada?' sale del Estado (Backlog); 'Motivo' = Motivo + Comentario del Backlog. Ordenado por frecuencia y sprint.", XF["subw"]); hs.merge("B2","H2")
+    for c in range(3,9): hs.blank(2,c, XF["subw"])
+    hd=["Frecuencia","Sprint","Presentación (vie)","Subtarea","Responsable","¿Completada?","Motivo / Comentario (por qué)"]
+    for i,h in enumerate(hd): hs.t(6,2+i,h, XF["tblhdr"])
+    HR0=7; NH=40
+    for kk in range(NH):
+        r=HR0+kk
+        hs.f(r,9, f'IFERROR(MATCH(SMALL({DM}$BH$7:$BH$200,ROW()-{HR0}+1),{DM}$BH$7:$BH$200,0),"")', XF["datc"])
+        p=f"$I{r}"
+        hs.f(r,2, f'IF({p}="","",INDEX({DM}$AO$7:$AO$200,{p}))', XF["textc_n"])
+        hs.f(r,3, f'IF({p}="","",INDEX({DM}$AR$7:$AR$200,{p}))', XF["textc_n"])
+        hs.f(r,4, f'IF({p}="","",INDEX({DM}$AW$7:$AW$200,{p}))', XF["date_n"])
+        hs.f(r,5, f'IF({p}="","",INDEX({DM}$F$7:$F$200,{p}))', XF["textl_n"])
+        hs.f(r,6, f'IF({p}="","",INDEX({DM}$G$7:$G$200,{p}))', XF["textl_n"])
+        hs.f(r,7, f'IF({p}="","",INDEX({DM}$BG$7:$BG$200,{p}))', XF["textc_n"])
+        hs.f(r,8, f'IF({p}="","",INDEX({DM}$BF$7:$BF$200,{p}))', XF["textl_n"])
+    hbend=HR0+NH-1
+    fsi=esc(f'$G{HR0}="Sí"'); fnoo=esc(f'$G{HR0}="No"'); fb=esc(f'$B{HR0}<>""')
+    cf_hs=(f'<conditionalFormatting sqref="G{HR0}:G{hbend}">'
+            f'<cfRule type="expression" dxfId="{DX["done"]}" priority="10"><formula>{fsi}</formula></cfRule>'
+            f'<cfRule type="expression" dxfId="{DX["red"]}" priority="11"><formula>{fnoo}</formula></cfRule>'
             '</conditionalFormatting>'
-            f'<conditionalFormatting sqref="H{HR0}:H{hbend}">'
-            f'<cfRule type="expression" dxfId="{DX["done"]}" priority="12"><formula>{fsi}</formula></cfRule>'
-            f'<cfRule type="expression" dxfId="{DX["red"]}" priority="13"><formula>{fno}</formula></cfRule>'
-            f'<cfRule type="expression" dxfId="{DX["amber"]}" priority="14"><formula>{fpar}</formula></cfRule>'
-            '</conditionalFormatting>')
-    dv_hs=(f'<dataValidations count="1">'
-           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="H{HR0}:H{hbend}"><formula1>"Sí,No,Parcial"</formula1></dataValidation>'
-           f'</dataValidations>')
-    svh='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
-    sheet10=render_sheet(hs, f"A1:I{hbend}", cf=cf_hs, sheetviews=svh, rowheights={1:26,2:46}, dv=dv_hs)
+            f'<conditionalFormatting sqref="B{HR0}:H{hbend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="20"><formula>{fb}</formula></cfRule></conditionalFormatting>')
+    svh='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+    sheet10=render_sheet(hs, f"A1:I{hbend}", cf=cf_hs, sheetviews=svh, rowheights={1:26,2:46})
     wr("xl/worksheets/sheet10.xml", sheet10)
 
     # ---------- plumbing: workbook.xml (6 hojas nuevas) ----------
