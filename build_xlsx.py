@@ -667,12 +667,12 @@ def build_all():
              '<col min="9" max="9" width="14"/><col min="10" max="10" width="20"/>'
              '<col min="11" max="11" width="30"/><col min="12" max="12" width="7"/>'
              '<col min="13" max="13" width="9"/><col min="14" max="14" width="9"/>'
-             '<col min="15" max="15" width="13"/></cols>')
-    bg.t(1,2,"BACKLOG GENERAL — gestión operativa del trabajo", XF["title"]); bg.merge("B1","O1")
-    for c in range(3,16): bg.blank(1,c, XF["title"])
-    bg.t(2,2,'Trabajo del día a día. "% Avance" CALCULADO desde el Estado (Pendiente 0 · Iniciada 25 · En progreso 50 · Casi lista 75 · Completada 100): no se edita a mano. Para MOVER una tarea de sprint: escribí el nº de sprint destino en "Mover a sprint" (col. M) y la fecha en "Últ. actualización" (col. O); el Historial registra solo el cierre del sprint anterior y la continuidad en el nuevo. "Acción"/"Motivo" explican por qué. SPRINT ACTUAL y Mora (días hábiles) se calculan solos.', XF["subw"]); bg.merge("B2","O2")
-    for c in range(3,16): bg.blank(2,c, XF["subw"])
-    th=["ID","Subtarea / Proyecto","Frecuencia","% Avance","Sprint inic.","Estado","Acción si no se hizo","SPRINT ACTUAL","Motivo (por qué)","Bitácora / Actividad","Mora (h)","Mover a sprint","Nuevo","Últ. actualización"]
+             '<col min="15" max="15" width="13"/><col min="16" max="16" width="13"/></cols>')
+    bg.t(1,2,"BACKLOG GENERAL — gestión operativa del trabajo", XF["title"]); bg.merge("B1","P1")
+    for c in range(3,17): bg.blank(1,c, XF["title"])
+    bg.t(2,2,'Trabajo del día a día. "% Avance" CALCULADO desde el Estado (Pendiente 0 · Iniciada 25 · En progreso 50 · Casi lista 75 · Completada 100): no se edita a mano. Para MOVER una tarea de sprint: escribí el nº de sprint destino en "Mover a sprint" (col. M) y la fecha en "Últ. actualización" (col. O); el Historial registra solo el cierre del sprint anterior y la continuidad en el nuevo. "Acción"/"Motivo" explican por qué. SPRINT ACTUAL, Mora (días hábiles) y "Entrega pactada" (viernes del sprint actual; se corre al mover la tarea) se calculan solos.', XF["subw"]); bg.merge("B2","P2")
+    for c in range(3,17): bg.blank(2,c, XF["subw"])
+    th=["ID","Subtarea / Proyecto","Frecuencia","% Avance","Sprint inic.","Estado","Acción si no se hizo","SPRINT ACTUAL","Motivo (por qué)","Bitácora / Actividad","Mora (h)","Mover a sprint","Nuevo","Últ. actualización","Entrega pactada"]
     for i,h in enumerate(th): bg.t(6,2+i,h, XF["tblhdr"])
     BR0=7
     for r in range(BR0, DATA_LAST+1):
@@ -693,18 +693,19 @@ def build_all():
         bg.blank(r,13, XF["input"])                     # M: Mover a sprint (input nº de sprint destino; vacío = no se movió)
         bg.f(r,14, f'IF({DM}$C{r},{DM}$BA{r},"")', XF["textc_n"])     # N: Nuevo (computado)
         bg.blank(r,15, XF["input_date"])                # O: Última actualización (input fecha) — FASE 5
+        bg.f(r,16, f'IF({DM}$C{r},IF(ISNUMBER({DM}$BP{r}),{DM}$BP{r},""),"")', XF["date_n"])  # P: Entrega pactada = viernes del sprint ACTUAL (AVDate); se corre al mover la tarea
     bend=DATA_LAST
     fb=esc(f'$B{BR0}<>""'); fph=esc(f'{DM}$B{BR0}'); fnew=esc(f'$N{BR0}<>""')
     fco=esc(f'$G{BR0}="Completada"'); fpro=esc(f'OR($G{BR0}="En progreso",$G{BR0}="Casi lista")')
     cf_bg=(
       f'<conditionalFormatting sqref="E{BR0}:E{bend}"><cfRule type="dataBar" priority="10"><dataBar><cfvo type="num" val="0"/><cfvo type="num" val="1"/><color rgb="FF63C384"/></dataBar></cfRule></conditionalFormatting>'
-      f'<conditionalFormatting sqref="B{BR0}:O{bend}"><cfRule type="expression" dxfId="{DX["modhdr"]}" priority="20"><formula>{fph}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="B{BR0}:P{bend}"><cfRule type="expression" dxfId="{DX["modhdr"]}" priority="20"><formula>{fph}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="G{BR0}:H{bend}"><cfRule type="expression" dxfId="{DX["inputhl"]}" priority="21"><formula>{fb}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="J{BR0}:K{bend}"><cfRule type="expression" dxfId="{DX["inputhl"]}" priority="22"><formula>{fb}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="O{BR0}:O{bend}"><cfRule type="expression" dxfId="{DX["inputhl"]}" priority="26"><formula>{fb}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="G{BR0}:G{bend}"><cfRule type="expression" dxfId="{DX["done"]}" priority="23"><formula>{fco}</formula></cfRule><cfRule type="expression" dxfId="{DX["amber"]}" priority="24"><formula>{fpro}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="N{BR0}:N{bend}"><cfRule type="expression" dxfId="{DX["amber"]}" priority="25"><formula>{fnew}</formula></cfRule></conditionalFormatting>'
-      f'<conditionalFormatting sqref="B{BR0}:O{bend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="40"><formula>{fb}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="B{BR0}:P{bend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="40"><formula>{fb}</formula></cfRule></conditionalFormatting>'
     )
     motivos="Falta de tiempo,Dependencia externa,Bloqueo técnico,Esperando información,Repriorización,Cambio de alcance,Otro"
     dv_bg=(f'<dataValidations count="4">'
@@ -714,15 +715,14 @@ def build_all():
            f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="M{BR0}:M{bend}"><formula1>"1,2,3,4,5,6,7,8,9,10,11,12"</formula1></dataValidation>'
            f'</dataValidations>')
     svb='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="G7" sqref="G7"/></sheetView></sheetViews>'
-    sheet9=render_sheet(bg, f"A1:O{bend}", cf=cf_bg, sheetviews=svb, rowheights={1:26,2:46}, dv=dv_bg)
+    sheet9=render_sheet(bg, f"A1:P{bend}", cf=cf_bg, sheetviews=svb, rowheights={1:26,2:46}, dv=dv_bg)
     wr("xl/worksheets/sheet9.xml", sheet9)
 
     # ---------- sheet10: Historial de Sprints (REGISTRO DE CUMPLIMIENTO — manual, persistente) ----------
     hs=Sheet()
     hs.cols=('<cols><col min="1" max="1" width="2.5"/><col min="2" max="2" width="13"/>'
              '<col min="3" max="3" width="46"/><col min="4" max="4" width="8"/>'
-             '<col min="5" max="5" width="13"/><col min="6" max="6" width="50"/>'
-             '<col min="7" max="7" width="9" hidden="1"/></cols>')
+             '<col min="5" max="5" width="13"/><col min="6" max="6" width="50"/></cols>')
     hs.t(1,2,"HISTORIAL DE SPRINTS — registro de cumplimiento (qué cumpliste y qué no, cuándo y por qué)", XF["title"]); hs.merge("B1","F1")
     for c in range(3,7): hs.blank(1,c, XF["title"])
     hs.t(2,2,"Registro PERMANENTE y editable (no se recalcula: lo que cargás queda). Cada vez que cierra un sprint para una tarea, agregá UNA fila: Fecha, Tarea, Sprint, ¿Cumplió? (Si/No/Parcial) y el Motivo. Filtrá con la ▼ para ver el historial de una tarea o de un sprint; ordená con Datos > Ordenar por Fecha o Tarea.", XF["subw"]); hs.merge("B2","F2")
@@ -739,7 +739,6 @@ def build_all():
         hs.blank(r,4, XF["input"])        # Sprint (input, desplegable)
         hs.blank(r,5, XF["input"])        # Cumplio? (input, desplegable)
         hs.blank(r,6, XF["input_l"])      # Motivo (input)
-        hs.f(r,7, f'IF({DM}$C{r},{DM}$F{r},"")', XF["datc"])   # G oculta: lista de tareas para el desplegable
     fsi=esc(f'$E{HR0}="Si"'); fno=esc(f'$E{HR0}="No"'); fpar=esc(f'$E{HR0}="Parcial"'); fpop=esc(f'$B{HR0}<>""')
     cf_hs=(
       f'<conditionalFormatting sqref="E{HR0}:E{hbend}">'
@@ -750,18 +749,20 @@ def build_all():
       f'<conditionalFormatting sqref="B{HR0}:F{hbend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="40"><formula>{fpop}</formula></cfRule></conditionalFormatting>'
     )
     dv_hs=(f'<dataValidations count="3">'
-           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="C{HR0}:C{hbend}"><formula1>$G${HR0}:$G$200</formula1></dataValidation>'
+           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="C{HR0}:C{hbend}"><formula1>ListaTareas</formula1></dataValidation>'
            f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="D{HR0}:D{hbend}"><formula1>"1,2,3,4,5,6,7,8,9,10,11,12"</formula1></dataValidation>'
            f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="E{HR0}:E{hbend}"><formula1>"Si,No,Parcial"</formula1></dataValidation>'
            f'</dataValidations>')
     af_hs=f'<autoFilter ref="B6:F{hbend}"/>'
     svh='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
-    sheet10=render_sheet(hs, f"A1:G{hbend}", cf=cf_hs, sheetviews=svh, rowheights={1:26,2:48}, dv=dv_hs, autofilter=af_hs)
+    sheet10=render_sheet(hs, f"A1:F{hbend}", cf=cf_hs, sheetviews=svh, rowheights={1:26,2:48}, dv=dv_hs, autofilter=af_hs)
     wr("xl/worksheets/sheet10.xml", sheet10)
 
 
     # ---------- plumbing: workbook.xml (6 hojas nuevas) ----------
     wb=rd("xl/workbook.xml")
+    # nombre definido para el desplegable de tareas del Historial (apunta al motor; borrar filas del Historial es 100% seguro)
+    wb=wb.replace("</definedNames>", '<definedName name="ListaTareas">_Datos!$F$7:$F$200</definedName></definedNames>', 1)
     new_sheets=('<sheet name="Backlog General" sheetId="20" r:id="rId16"/>'
                 '<sheet name="Sprints" sheetId="19" r:id="rId15"/>'
                 '<sheet name="Historial de Sprints" sheetId="21" r:id="rId17"/>'
