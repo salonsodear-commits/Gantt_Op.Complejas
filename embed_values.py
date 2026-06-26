@@ -15,7 +15,8 @@ import numpy as np, formulas
 
 OUT='/home/user/Gantt_Op.Complejas/Diagrama_de_Gantt___Proyecto_Datos_Op._Complejas_080626.xlsx'
 SHEETS={'TABLERO':'sheet5','ENTREGAS PRÓXIMAS':'sheet6','_DATOS':'sheet7',
-        'SPRINTS':'sheet8','BACKLOG GENERAL':'sheet9','HISTORIAL DE SPRINTS':'sheet10'}
+        'SPRINTS':'sheet8','BACKLOG GENERAL':'sheet9','HISTORIAL DE SPRINTS':'sheet10',
+        'EJECUCIÓN POR TAREA':'sheet11'}
 
 def calc(fp):
     xl=formulas.ExcelModel().loads(fp).finish(circular=True)

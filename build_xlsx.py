@@ -168,6 +168,8 @@ def build_styles():
     adddxf("done",   '<dxf><font><b/><color rgb="FFFFFFFF"/></font><fill><patternFill><bgColor rgb="FF38761D"/></patternFill></fill></dxf>')
     adddxf("inputhl",'<dxf><fill><patternFill><bgColor rgb="FFFFF2CC"/></patternFill></fill></dxf>')
     adddxf("modhdr", '<dxf><font><b/><color rgb="FF1F3A52"/></font><fill><patternFill><bgColor rgb="FFD9E1F2"/></patternFill></fill></dxf>')
+    adddxf("blue",   '<dxf><font><color rgb="FF1F3A52"/></font><fill><patternFill><bgColor rgb="FFDDEBF7"/></patternFill></fill></dxf>')
+    adddxf("grey",   '<dxf><font><color rgb="FF808080"/></font><fill><patternFill><bgColor rgb="FFF2F2F2"/></patternFill></fill></dxf>')
     dxf_xml="".join(dxfs)
     s = re.sub(r'(<dxfs count=")(\d+)(")', lambda m: f'{m.group(1)}{int(m.group(2))+len(dxfs)}{m.group(3)}', s, count=1)
     s = s.replace("</dxfs>", dxf_xml+"</dxfs>", 1)
@@ -193,7 +195,7 @@ def col_letter(c):
     return s
 def cr(r,c): return f"{col_letter(c)}{r}"
 
-def render_sheet(sh, dimension, cf="", sheetviews="", extra_after_data="", rowheights=None, dv="", hidden_rows=None):
+def render_sheet(sh, dimension, cf="", sheetviews="", extra_after_data="", rowheights=None, dv="", hidden_rows=None, autofilter=""):
     rowheights=rowheights or {}
     hidden_rows=hidden_rows or set()
     body=[]
@@ -216,7 +218,7 @@ def render_sheet(sh, dimension, cf="", sheetviews="", extra_after_data="", rowhe
             '<sheetFormatPr defaultRowHeight="15"/>'
             f'{cols}'
             f'<sheetData>{sd}</sheetData>'
-            f'{merge_xml}{cf}{dv}'
+            f'{autofilter}{merge_xml}{cf}{dv}'
             '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>'
             f'{extra_after_data}'
             '</worksheet>')
@@ -296,10 +298,9 @@ def build_all():
     # 3) formato condicional (semáforo col F, escala color Sprint, barras para filas nuevas)
     cf_new = (
       '<conditionalFormatting sqref="F7:F200">'
-      f'<cfRule type="expression" dxfId="{DX["done"]}" priority="20"><formula>{esc("AND(LEN($G7)>0,NOT(ISTEXT($K7)),$J7>=1)")}</formula></cfRule>'
-      f'<cfRule type="expression" dxfId="{DX["red"]}" priority="21"><formula>{esc("AND(LEN($G7)>0,NOT(ISTEXT($K7)),ISNUMBER($F7),$F7<TODAY(),$J7<1)")}</formula></cfRule>'
-      f'<cfRule type="expression" dxfId="{DX["amber"]}" priority="22"><formula>{esc("AND(LEN($G7)>0,NOT(ISTEXT($K7)),ISNUMBER($F7),$F7-TODAY()>=0,$F7-TODAY()<=7,$J7<1)")}</formula></cfRule>'
-      f'<cfRule type="expression" dxfId="{DX["green"]}" priority="23"><formula>{esc("AND(LEN($G7)>0,NOT(ISTEXT($K7)),ISNUMBER($F7),$F7-TODAY()>7,$J7<1)")}</formula></cfRule>'
+      f'<cfRule type="expression" dxfId="{DX["red"]}" priority="21"><formula>{esc("AND(LEN($G7)>0,NOT(ISTEXT($K7)),ISNUMBER($F7),$F7<TODAY())")}</formula></cfRule>'
+      f'<cfRule type="expression" dxfId="{DX["amber"]}" priority="22"><formula>{esc("AND(LEN($G7)>0,NOT(ISTEXT($K7)),ISNUMBER($F7),$F7-TODAY()>=0,$F7-TODAY()<=7)")}</formula></cfRule>'
+      f'<cfRule type="expression" dxfId="{DX["green"]}" priority="23"><formula>{esc("AND(LEN($G7)>0,NOT(ISTEXT($K7)),ISNUMBER($F7),$F7-TODAY()>7)")}</formula></cfRule>'
       '</conditionalFormatting>'
       '<conditionalFormatting sqref="E7:E200"><cfRule type="colorScale" priority="24"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FFDDEBF7"/><color rgb="FF2E75B6"/></colorScale></cfRule></conditionalFormatting>'
       '<conditionalFormatting sqref="O48:BR200">'
@@ -310,6 +311,28 @@ def build_all():
     )
     pos = s1.rindex("</conditionalFormatting>") + len("</conditionalFormatting>")
     s1 = s1[:pos] + cf_new + s1[pos:]
+    # ===== FASE 1 (migración): leer el avance manual (J) para SEMBRAR estados del Backlog antes de limpiarlo =====
+    JSEED={}
+    for _m in re.finditer(r'<c r="J(\d+)"[^>]*><v>([^<]+)</v></c>', s1):
+        _r=int(_m.group(1))
+        if 7<=_r<=51:
+            try: JSEED[_r]=float(_m.group(2))
+            except: pass
+    # ===== FASE 2: el Gantt deja de mostrar avance — barras SÓLIDAS (sin relleno %), col J en blanco, cabecera + nota =====
+    s1 = re.sub(r'<cfRule\b(?:(?!</cfRule>).)*?task_progress(?:(?!</cfRule>).)*?</cfRule>', '', s1, flags=re.S)  # quita relleno proporcional -> barras sólidas
+    def _blankJ(m):
+        _r=int(m.group(1))
+        if not (7<=_r<=51): return m.group(0)
+        st=re.search(r's="(\d+)"', m.group(2))
+        return f'<c r="J{_r}"{(" s="+chr(34)+st.group(1)+chr(34)) if st else ""}/>'
+    s1 = re.sub(r'<c r="J(\d+)"([^>]*?)>(?:<f[^>]*>.*?</f>)?<v>[^<]*</v></c>', _blankJ, s1, flags=re.S)  # borra % de J7:J51
+    def _setinline(s, ref, txt):
+        def repl(m):
+            st=re.search(r's="(\d+)"', m.group(0)); s_attr=f' s="{st.group(1)}"' if st else ''
+            return f'<c r="{ref}"{s_attr} t="inlineStr"><is><t xml:space="preserve">{esc(txt)}</t></is></c>'
+        return re.sub(r'<c r="%s"[^>]*?(?:/>|>.*?</c>)'%ref, repl, s, count=1, flags=re.S)
+    s1=_setinline(s1,"J6","Avance → Backlog")     # cabecera PROGRESO -> aviso
+    s1=_setinline(s1,"A2","El avance ya NO se edita en el Gantt: se calcula automáticamente desde el Backlog (estado de cada subtarea) y se ve en Sprints. El Gantt sólo planifica fechas, duraciones y dependencias.")
     wr("xl/worksheets/sheet1.xml", s1)
 
     # ---------- sheet7: _Datos (motor, oculta) ----------
@@ -327,7 +350,8 @@ def build_all():
            "Comentario","Aux","ClavePri","urg","atr","rsk","AlertRaw","Frecuencia","FreqLen",
            "FreqStart","SprPlanF","SprActF","EstadoIn","AccionIn","SprVigF","CierreF","MoraF",
            "EstadoBoard","SprKeyF","Nuevo","keySem","keyQui","keyMen",
-           "MotivoVal","MotivoFull","Completada","keyHist","AvanceSprint"]
+           "MotivoVal","MotivoFull","Completada","keyHist","AvanceSprint",
+           "ModFirstRow","keyTGS","SemanaRel","SemanaLabel"]
     for i,h in enumerate(heads): d.t(6,i+1,h, XF["tblhdr"])
     for r in range(DATA_FIRST, DATA_LAST+1):
         d.f(r,1,  "ROW()", XF["datc"])
@@ -338,7 +362,7 @@ def build_all():
         d.f(r,6,  f'IF($C{r},{SRC}!$G{r},"")', XF["dattxt"])
         d.f(r,7,  f'IF($C{r},IF({SRC}!$I{r}="","(Sin asignar)",{SRC}!$I{r}),"")', XF["dattxt"])
         d.f(r,8,  f'IF($C{r},IF(ISNUMBER({SRC}!$F{r}),{SRC}!$F{r},""),"")', XF["datc"])
-        d.f(r,9,  f'IF($C{r},{SRC}!$J{r},"")', XF["datc"])
+        d.f(r,9,  f'IF($C{r},IF({BL}$G{r}="Completada",1,IF({BL}$G{r}="Casi lista",0.75,IF({BL}$G{r}="En progreso",0.5,IF({BL}$G{r}="Iniciada",0.25,0)))),"")', XF["datc"])  # FASE 1 calculateProgress(): avance CALCULADO desde el estado del Backlog (única fuente)
         d.f(r,10, f'IF($C{r},IF($I{r}>=1,"Completado",IF(NOT(ISNUMBER($H{r})),"Sin fecha",IF($H{r}<TODAY(),"Vencido",IF(($H{r}-TODAY())<={UMBRAL},"Próximo a vencer","En curso")))),"")', XF["dattxt"])
         d.f(r,11, f'IF(AND($C{r},ISNUMBER($H{r})),$H{r}-TODAY(),"")', XF["datc"])
         d.f(r,12, f'IF(AND($C{r},ISNUMBER($H{r})),$AD{r}*1000000+$H{r}+ROW()/100000,"")', XF["datc"])
@@ -376,10 +400,10 @@ def build_all():
         d.f(r,45, f'IF($C{r},CEILING(MAX(1,INT((TODAY()-$AQ{r}+{SPR_LEN}-1)/{SPR_LEN})+1)/$AP{r},1),"")', XF["datc"])  # SprintActFreq
         d.f(r,46, f'IF($C{r},{BL}$G{r},"")', XF["dattxt"])                                    # EstadoIn (Backlog: En curso/Completo/No se realizó)
         d.f(r,47, f'IF($C{r},{BL}$H{r},"")', XF["dattxt"])                                    # AccionIn (Backlog: Pasa/Baja/Cancelado)
-        d.f(r,48, f'IF(AND($C{r},ISNUMBER($AR{r})),IF(OR($AT{r}="Completo",$AU{r}="Cancelado",$AU{r}="Baja prioridad"),$AR{r},IF($AU{r}="Pasa al siguiente",MAX($AR{r}+1,$AS{r}),MAX($AR{r},$AS{r}))),"")', XF["datc"])  # SprintVigFreq
+        d.f(r,48, f'IF(AND($C{r},ISNUMBER($AR{r})),IF(OR($AT{r}="Completada",$AU{r}="Cancelado",$AU{r}="Baja prioridad"),$AR{r},IF($AU{r}="Pasa al siguiente",MAX($AR{r}+1,$AS{r}),MAX($AR{r},$AS{r}))),"")', XF["datc"])  # SprintVigFreq
         d.f(r,49, f'IF(AND($C{r},ISNUMBER($AR{r})),$AQ{r}+$AR{r}*$AP{r}*{SPR_LEN}-{SPR_LEN},"")', XF["datc"])                         # CierrePlanFreq
-        d.f(r,50, f'IF($C{r},IF(OR($AT{r}="Completo",$AU{r}="Cancelado",$AU{r}="Baja prioridad",NOT(ISNUMBER($AW{r}))),0,IF(TODAY()>$AW{r},NETWORKDAYS($AW{r},TODAY(),{HOLIDAYS})-1,0)),"")', XF["datc"])  # MoraFreq en DÍAS HÁBILES (sáb/dom+feriados no cuentan)
-        d.f(r,51, f'IF($C{r},IF(NOT(ISNUMBER($AR{r})),"Sin fecha",IF($AT{r}="Completo","Completo",IF($AU{r}="Cancelado","Cancelado",IF($AU{r}="Baja prioridad","Baja prioridad",IF($AX{r}>0,"Vencida","Pendiente"))))),"")', XF["dattxt"])  # EstadoBoard
+        d.f(r,50, f'IF($C{r},IF(OR($AT{r}="Completada",$AU{r}="Cancelado",$AU{r}="Baja prioridad",NOT(ISNUMBER($AW{r}))),0,IF(TODAY()>$AW{r},NETWORKDAYS($AW{r},TODAY(),{HOLIDAYS})-1,0)),"")', XF["datc"])  # MoraFreq en DÍAS HÁBILES (sáb/dom+feriados no cuentan)
+        d.f(r,51, f'IF($C{r},IF(NOT(ISNUMBER($AR{r})),"Sin fecha",IF($AT{r}="Completada","Completada",IF($AU{r}="Cancelado","Cancelado",IF($AU{r}="Baja prioridad","Baja prioridad",IF($AX{r}>0,"Vencida","En curso"))))),"")', XF["dattxt"])  # EstadoBoard
         d.f(r,52, f'IF($C{r},IF(ISNUMBER($AV{r}),$AO{r}&" · S"&$AV{r},"(Sin fecha)"),"")', XF["dattxt"])                         # SprintKeyFreq
         d.f(r,53, f'IF($C{r},IF(AND(ISNUMBER({BL}$M{r}),{BL}$M{r}=$AS{r}),"Nuevo S"&{BL}$M{r},""),"")', XF["datc"])  # Nuevo (solicitado en sprint = sprint actual de su frecuencia)
         d.f(r,54, f'IF(AND($C{r},$AO{r}="Semanal",ISNUMBER($AV{r})),$AV{r}*100000+ROW(),"")', XF["datc"])      # keySem
@@ -389,14 +413,18 @@ def build_all():
         d.f(r,58, f'IF($C{r},IF($BE{r}="","",$BE{r})&IF(AND($BE{r}<>"",$AH{r}<>"")," · ","")&IF($AH{r}="","",$AH{r}),"")', XF["dattxt"])  # MotivoFull = validación + detalle libre
         d.f(r,59, f'IF($C{r},IF($J{r}="Completado","Sí","No"),"")', XF["dattxt"])              # Completada (Sí/No)
         d.f(r,60, f'IF(AND($C{r},ISNUMBER($AR{r})),IF($AO{r}="Semanal",1,IF($AO{r}="Quincenal",2,3))*1000000000+$AR{r}*100000+ROW(),"")', XF["datc"])  # keyHist (orden Frecuencia>Sprint plan>fila)
-        d.f(r,61, f'IF($C{r},IF($AT{r}="Completo",1,IF($AU{r}="Cancelado","",$I{r})),"")', XF["datc"])  # AvanceSprint: avance vinculado al sprint (Completo=100%; Cancelado no cuenta; resto=avance parcial)
+        d.f(r,61, f'IF($C{r},IF($AU{r}="Cancelado","",$I{r}),"")', XF["datc"])  # AvanceSprint = avance calculado (excluye canceladas del promedio)
+        d.f(r,62, f'IF($C{r},IFERROR(MATCH($D{r},$D$7:$D$200,0)+6,ROW()),"")', XF["datc"])  # FASE 4: fila del 1er subtarea del módulo (orden de Tarea General)
+        d.f(r,63, f'IF(AND($C{r},ISNUMBER($AV{r})),$BJ{r}*1000000+$AV{r}*1000+ROW(),"")', XF["datc"])  # keyTGS: orden Tarea General > Sprint vigente > fila
+        d.f(r,64, f'IF(AND($C{r},ISNUMBER($AW{r})),ROUND(($AW{r}-({SPR_D1}+({SP}$E$5-1)*{SPR_LEN}))/{SPR_LEN},0),"")', XF["datc"])  # SemanaRel: offset de semanas vs semana actual
+        d.f(r,65, f'IF($C{r},IF(NOT(ISNUMBER($BL{r})),"",IF($BL{r}<0,"Pasada",IF($BL{r}=0,"Actual",IF($BL{r}=1,"Siguiente",IF($BL{r}=2,"+2 sem",IF($BL{r}=3,"+3 sem","Posterior")))))),"")', XF["dattxt"])  # SemanaLabel
     # listado dinámico de sprints VIGENTES: solo aparecen los que EXISTEN
     for r in range(7,37):                     # candidatos 1..30
         d.f(r,16, "ROW()-6", XF["datc"])
         d.f(r,17, f'IF(COUNTIF($AD$7:$AD$200,$P{r})>0,$P{r},"")', XF["datc"])
     d.n(37,16,9999, XF["datc"])               # candidato "(Sin sprint)"
     d.f(37,17, 'IF(COUNTIF($AD$7:$AD$200,9999)>0,9999,"")', XF["datc"])
-    sheet7 = render_sheet(d, f"A1:BI{DATA_LAST}")
+    sheet7 = render_sheet(d, f"A1:BM{DATA_LAST}")
     wr("xl/worksheets/sheet7.xml", sheet7)
 
     # ---------- sheet6: Entregas Próximas (priorizada) ----------
@@ -608,11 +636,24 @@ def build_all():
                 f'<conditionalFormatting sqref="B{ds}:F{de}"><cfRule type="expression" dxfId="{DX["border"]}" priority="{prio+4}"><formula>{fb}</formula></cfRule></conditionalFormatting>')
         prio+=5
     de=boards[-1][2]+boards[-1][3]-1
-    dv_sp=(f'<dataValidations count="1">'
+    # ---- FASE 5: BITÁCORA / EVENTOS DEL SPRINT (registro manual: qué cambió, cuándo, quién, bloqueos) ----
+    BIT0=de+3
+    sp.t(BIT0-1,2,"BITÁCORA / EVENTOS DEL SPRINT  ·  registro manual (actividad, cambios de estado, bloqueos)", XF["section"]); sp.merge(f"B{BIT0-1}",f"E{BIT0-1}"); [sp.blank(BIT0-1,c,XF["section"]) for c in (3,4,5)]
+    for i,h in enumerate(["Fecha","Tipo de evento","Detalle (qué / quién)","Sprint"]): sp.t(BIT0,2+i,h, XF["tblhdr"])
+    BITN=14
+    for k in range(BITN):
+        rr=BIT0+1+k
+        sp.blank(rr,2, XF["input_date"]); sp.blank(rr,3, XF["input_l"]); sp.blank(rr,4, XF["input_l"]); sp.blank(rr,5, XF["input_l"])
+    bitend=BIT0+BITN
+    sp.t(bitend+1,2,"Tipos: Sprint creado · Subtarea agregada · Estado cambiado · Bloqueo · Resolución de bloqueo · Subtarea completada · Sprint cerrado.", XF["subw"]); sp.merge(f"B{bitend+1}",f"E{bitend+1}")
+    SPEND=bitend+1
+    eventos="Sprint creado,Subtarea agregada,Estado cambiado,Bloqueo,Resolución de bloqueo,Subtarea completada,Sprint cerrado"
+    dv_sp=(f'<dataValidations count="2">'
            f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="J5:J12"><formula1>"Semanal,Quincenal,Mensual"</formula1></dataValidation>'
+           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="C{BIT0+1}:C{bitend}"><formula1>"{eventos}"</formula1></dataValidation>'
            f'</dataValidations>')
     svs='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
-    sheet8=render_sheet(sp, f"A1:L{de}", cf=cf_sp, sheetviews=svs, rowheights={1:26,2:46}, dv=dv_sp)
+    sheet8=render_sheet(sp, f"A1:L{SPEND}", cf=cf_sp, sheetviews=svs, rowheights={1:26,2:46}, dv=dv_sp)
     wr("xl/worksheets/sheet8.xml", sheet8)
 
     # ---------- sheet9: Backlog General (OKRs por proyecto + estado/acción/justificación) ----------
@@ -620,100 +661,166 @@ def build_all():
     bg.cols=('<cols><col min="1" max="1" width="2.5"/><col min="2" max="2" width="7"/>'
              '<col min="3" max="3" width="44"/><col min="4" max="4" width="11"/>'
              '<col min="5" max="5" width="10"/><col min="6" max="6" width="11"/>'
-             '<col min="7" max="7" width="15"/><col min="8" max="8" width="18"/>'
-             '<col min="9" max="9" width="14"/><col min="10" max="10" width="22"/>'
-             '<col min="11" max="11" width="34"/><col min="12" max="12" width="8"/>'
-             '<col min="13" max="13" width="11"/><col min="14" max="14" width="10"/></cols>')
-    bg.t(1,2,"BACKLOG GENERAL — ejecución de sprints (por subtarea)", XF["title"]); bg.merge("B1","N1")
-    for c in range(3,15): bg.blank(1,c, XF["title"])
-    bg.t(2,2,'Hoja de EJECUCIÓN (la planificación, fechas y notas viven en \'Proyecto Datos (OKR´s)\'). El "% Avance" se VINCULA al sprint: una tarea con Estado "Completo" cuenta 100%; el resto, su avance parcial del Gantt; en la fila de proyecto es el promedio de sus subtareas (las "Canceladas" no cuentan). Estado = "Completo" / "No se realizó". Si NO se realizó, Acción: "Pasa al siguiente" / "Baja prioridad" (no cuenta mora) / "Cancelado", e indique el "Motivo" (lista) y un "Comentario" libre — quedan en el Historial. El "SPRINT ACTUAL" es el mismo nº que en Sprints e Historial. Mora en días hábiles.', XF["subw"]); bg.merge("B2","N2")
-    for c in range(3,15): bg.blank(2,c, XF["subw"])
-    th=["ID","Subtarea / Proyecto","Frecuencia","% Avance","Sprint inicial","Estado","Acción si no se realizó","SPRINT ACTUAL","Motivo (por qué)","Comentario / Detalle","Mora (h)","Sol. Sprint","Nuevo"]
+             '<col min="7" max="7" width="14"/><col min="8" max="8" width="18"/>'
+             '<col min="9" max="9" width="14"/><col min="10" max="10" width="20"/>'
+             '<col min="11" max="11" width="30"/><col min="12" max="12" width="7"/>'
+             '<col min="13" max="13" width="9"/><col min="14" max="14" width="9"/>'
+             '<col min="15" max="15" width="13"/></cols>')
+    bg.t(1,2,"BACKLOG GENERAL — gestión operativa del trabajo", XF["title"]); bg.merge("B1","O1")
+    for c in range(3,16): bg.blank(1,c, XF["title"])
+    bg.t(2,2,'Trabajo del día a día. El "% Avance" es CALCULADO desde el Estado de la subtarea (Pendiente 0 · Iniciada 25 · En progreso 50 · Casi lista 75 · Completada 100): no se edita a mano. En proyecto = promedio de sus subtareas. Si una tarea no se hizo, usá "Acción" (Pasa al siguiente / Baja prioridad — no cuenta mora / Cancelado) + "Motivo" + "Bitácora". "Últ. actualización" = fecha de tu último cambio. SPRINT ACTUAL coincide con Sprints e Historial. Mora en días hábiles.', XF["subw"]); bg.merge("B2","O2")
+    for c in range(3,16): bg.blank(2,c, XF["subw"])
+    th=["ID","Subtarea / Proyecto","Frecuencia","% Avance","Sprint inic.","Estado","Acción si no se hizo","SPRINT ACTUAL","Motivo (por qué)","Bitácora / Actividad","Mora (h)","Sol.","Nuevo","Últ. actualización"]
     for i,h in enumerate(th): bg.t(6,2+i,h, XF["tblhdr"])
     BR0=7
     for r in range(BR0, DATA_LAST+1):
         bg.f(r,2, f'IF({DM}$C{r},{DM}$O{r},"")', XF["textc_n"])
         bg.f(r,3, f'IF({DM}$C{r},{DM}$F{r},IF({DM}$B{r},{SRC}!$G{r},""))', XF["textl_n"])  # subtarea o título de proyecto (fase)
         bg.f(r,4, f'IF({DM}$C{r},{DM}$AO{r},"")', XF["textc_n"])      # Frecuencia
-        bg.f(r,5, f'IF({DM}$C{r},{DM}$BI{r},IF({DM}$B{r},IFERROR(AVERAGEIF({DM}$D$7:$D$200,{SRC}!$G{r},{DM}$BI$7:$BI$200),""),""))', XF["pct_n"])  # % Avance VINCULADO AL SPRINT (subtarea: Completo=100%/parcial; proyecto = promedio de subtareas)
+        bg.f(r,5, f'IF({DM}$C{r},{DM}$BI{r},IF({DM}$B{r},IFERROR(AVERAGEIF({DM}$D$7:$D$200,{SRC}!$G{r},{DM}$BI$7:$BI$200),""),""))', XF["pct_n"])  # % Avance CALCULADO (subtarea desde estado; proyecto = promedio)
         bg.f(r,6, f'IF({DM}$C{r},IF(ISNUMBER({DM}$AR{r}),{DM}$AR{r},"(Sin fecha)"),"")', XF["textc_n"])      # Sprint inicial
-        bg.blank(r,7, XF["textc_n"])    # G: Estado (input)
+        if r in JSEED:   # FASE 1 (migración): sembrar estado desde el avance manual previo del Gantt
+            _j=JSEED[r]; _e=("Completada" if _j>=1 else "Casi lista" if _j>=0.75 else "En progreso" if _j>=0.5 else "Iniciada" if _j>=0.25 else "Pendiente")
+            bg.t(r,7,_e, XF["textc_n"])
+        else: bg.blank(r,7, XF["textc_n"])    # G: Estado (input, dropdown)
         bg.blank(r,8, XF["textl_n"])    # H: Acción (input)
         bg.f(r,9, f'IF({DM}$C{r},IF(ISNUMBER({DM}$AV{r}),{DM}$AZ{r},"(Sin fecha)"),"")', XF["textc_n"])      # SPRINT ACTUAL (Frecuencia · S#)
         bg.blank(r,10, XF["textc_n"])   # J: Motivo (input, validación)
-        bg.blank(r,11, XF["textl_n"])   # K: Comentario / Detalle libre (input)
+        bg.blank(r,11, XF["textl_n"])   # K: Bitácora / Actividad libre (input)
         bg.f(r,12, f'IF({DM}$C{r},{DM}$AX{r},"")', XF["days_n"])       # Mora (días hábiles)
         if r in (49,50,51): bg.n(r,13,3, XF["input"])   # Forecast: solicitado en el sprint semanal actual (3)
         else: bg.blank(r,13, XF["input"])               # M: Sol. en Sprint (input)
         bg.f(r,14, f'IF({DM}$C{r},{DM}$BA{r},"")', XF["textc_n"])     # N: Nuevo (computado)
+        bg.blank(r,15, XF["input_date"])                # O: Última actualización (input fecha) — FASE 5
     bend=DATA_LAST
     fb=esc(f'$B{BR0}<>""'); fph=esc(f'{DM}$B{BR0}'); fnew=esc(f'$N{BR0}<>""')
-    fco=esc(f'$G{BR0}="Completo"'); fno=esc(f'$G{BR0}="No se realizó"')
+    fco=esc(f'$G{BR0}="Completada"'); fpro=esc(f'OR($G{BR0}="En progreso",$G{BR0}="Casi lista")')
     cf_bg=(
       f'<conditionalFormatting sqref="E{BR0}:E{bend}"><cfRule type="dataBar" priority="10"><dataBar><cfvo type="num" val="0"/><cfvo type="num" val="1"/><color rgb="FF63C384"/></dataBar></cfRule></conditionalFormatting>'
-      f'<conditionalFormatting sqref="B{BR0}:N{bend}"><cfRule type="expression" dxfId="{DX["modhdr"]}" priority="20"><formula>{fph}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="B{BR0}:O{bend}"><cfRule type="expression" dxfId="{DX["modhdr"]}" priority="20"><formula>{fph}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="G{BR0}:H{bend}"><cfRule type="expression" dxfId="{DX["inputhl"]}" priority="21"><formula>{fb}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="J{BR0}:K{bend}"><cfRule type="expression" dxfId="{DX["inputhl"]}" priority="22"><formula>{fb}</formula></cfRule></conditionalFormatting>'
-      f'<conditionalFormatting sqref="G{BR0}:G{bend}"><cfRule type="expression" dxfId="{DX["done"]}" priority="23"><formula>{fco}</formula></cfRule><cfRule type="expression" dxfId="{DX["red"]}" priority="24"><formula>{fno}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="O{BR0}:O{bend}"><cfRule type="expression" dxfId="{DX["inputhl"]}" priority="26"><formula>{fb}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="G{BR0}:G{bend}"><cfRule type="expression" dxfId="{DX["done"]}" priority="23"><formula>{fco}</formula></cfRule><cfRule type="expression" dxfId="{DX["amber"]}" priority="24"><formula>{fpro}</formula></cfRule></conditionalFormatting>'
       f'<conditionalFormatting sqref="N{BR0}:N{bend}"><cfRule type="expression" dxfId="{DX["amber"]}" priority="25"><formula>{fnew}</formula></cfRule></conditionalFormatting>'
-      f'<conditionalFormatting sqref="B{BR0}:N{bend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="40"><formula>{fb}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="B{BR0}:O{bend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="40"><formula>{fb}</formula></cfRule></conditionalFormatting>'
     )
     motivos="Falta de tiempo,Dependencia externa,Bloqueo técnico,Esperando información,Repriorización,Cambio de alcance,Otro"
     dv_bg=(f'<dataValidations count="4">'
-           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="G{BR0}:G{bend}"><formula1>"En curso,Completo,No se realizó"</formula1></dataValidation>'
+           f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="G{BR0}:G{bend}"><formula1>"Pendiente,Iniciada,En progreso,Casi lista,Completada"</formula1></dataValidation>'
            f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="H{BR0}:H{bend}"><formula1>"Pasa al siguiente,Baja prioridad,Cancelado"</formula1></dataValidation>'
            f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="J{BR0}:J{bend}"><formula1>"{motivos}"</formula1></dataValidation>'
            f'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="M{BR0}:M{bend}"><formula1>"1,2,3,4,5,6,7,8,9,10,11,12"</formula1></dataValidation>'
            f'</dataValidations>')
     svb='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="G7" sqref="G7"/></sheetView></sheetViews>'
-    sheet9=render_sheet(bg, f"A1:N{bend}", cf=cf_bg, sheetviews=svb, rowheights={1:26,2:40}, dv=dv_bg)
+    sheet9=render_sheet(bg, f"A1:O{bend}", cf=cf_bg, sheetviews=svb, rowheights={1:26,2:46}, dv=dv_bg)
     wr("xl/worksheets/sheet9.xml", sheet9)
 
     # ---------- sheet10: Historial de Sprints (POR TAREA, trazabilidad) ----------
     hs=Sheet()
     hs.cols=('<cols><col min="1" max="1" width="2.5"/><col min="2" max="2" width="12"/>'
-             '<col min="3" max="3" width="8"/><col min="4" max="4" width="16"/>'
-             '<col min="5" max="5" width="44"/><col min="6" max="6" width="18"/>'
-             '<col min="7" max="7" width="14"/><col min="8" max="8" width="46"/>'
-             '<col min="9" max="9" width="9" hidden="1"/></cols>')
-    hs.t(1,2,"HISTORIAL DE SPRINTS — por tarea (trazabilidad)", XF["title"]); hs.merge("B1","H1")
-    for c in range(3,9): hs.blank(1,c, XF["title"])
-    hs.t(2,2,"Cada subtarea en su SPRINT PLANIFICADO: si se completó o no y por qué. Trazabilidad: aunque una tarea pase a otro sprint, queda registrada acá en su sprint original con su motivo. '¿Completada?' sale del Estado (Backlog); 'Motivo' = Motivo + Comentario del Backlog. Ordenado por frecuencia y sprint.", XF["subw"]); hs.merge("B2","H2")
-    for c in range(3,9): hs.blank(2,c, XF["subw"])
-    hd=["Frecuencia","Sprint","Presentación (vie)","Subtarea","Responsable","¿Completada?","Motivo / Comentario (por qué)"]
+             '<col min="3" max="3" width="9"/><col min="4" max="4" width="11"/>'
+             '<col min="5" max="5" width="16"/><col min="6" max="6" width="42"/>'
+             '<col min="7" max="7" width="17"/><col min="8" max="8" width="13"/>'
+             '<col min="9" max="9" width="44"/><col min="10" max="10" width="9" hidden="1"/></cols>')
+    hs.t(1,2,"HISTORIAL DE SPRINTS — registro y evolución por tarea", XF["title"]); hs.merge("B1","I1")
+    for c in range(3,10): hs.blank(1,c, XF["title"])
+    hs.t(2,2,"Registro histórico. Cada subtarea en su SPRINT PLANIFICADO y en cuál CERRÓ realmente (evolución): si una tarea pasó de sprint, se ve 'Plan. S2 → Cerró S4' resaltado, con el motivo. '¿Completada?' sale del Estado del Backlog; 'Motivo' = Motivo + Bitácora. Ordenado por frecuencia y sprint.", XF["subw"]); hs.merge("B2","I2")
+    for c in range(3,10): hs.blank(2,c, XF["subw"])
+    hd=["Frecuencia","Plan. (S)","→ Cerró (S)","Presentación (vie)","Subtarea","Responsable","¿Completada?","Motivo / Resumen de cambios"]
     for i,h in enumerate(hd): hs.t(6,2+i,h, XF["tblhdr"])
     HR0=7; NH=40
     for kk in range(NH):
         r=HR0+kk
-        hs.f(r,9, f'IFERROR(MATCH(SMALL({DM}$BH$7:$BH$200,ROW()-{HR0}+1),{DM}$BH$7:$BH$200,0),"")', XF["datc"])
-        p=f"$I{r}"
+        hs.f(r,10, f'IFERROR(MATCH(SMALL({DM}$BH$7:$BH$200,ROW()-{HR0}+1),{DM}$BH$7:$BH$200,0),"")', XF["datc"])
+        p=f"$J{r}"
         hs.f(r,2, f'IF({p}="","",INDEX({DM}$AO$7:$AO$200,{p}))', XF["textc_n"])
-        hs.f(r,3, f'IF({p}="","",INDEX({DM}$AR$7:$AR$200,{p}))', XF["textc_n"])
-        hs.f(r,4, f'IF({p}="","",INDEX({DM}$AW$7:$AW$200,{p}))', XF["date_n"])
-        hs.f(r,5, f'IF({p}="","",INDEX({DM}$F$7:$F$200,{p}))', XF["textl_n"])
-        hs.f(r,6, f'IF({p}="","",INDEX({DM}$G$7:$G$200,{p}))', XF["textl_n"])
-        hs.f(r,7, f'IF({p}="","",INDEX({DM}$BG$7:$BG$200,{p}))', XF["textc_n"])
-        hs.f(r,8, f'IF({p}="","",INDEX({DM}$BF$7:$BF$200,{p}))', XF["textl_n"])
+        hs.f(r,3, f'IF({p}="","",INDEX({DM}$AR$7:$AR$200,{p}))', XF["textc_n"])              # planificado (AR)
+        hs.f(r,4, f'IF({p}="","",INDEX({DM}$AV$7:$AV$200,{p}))', XF["textc_n"])              # cerró en (AV vigente) — evolución
+        hs.f(r,5, f'IF({p}="","",INDEX({DM}$AW$7:$AW$200,{p}))', XF["date_n"])
+        hs.f(r,6, f'IF({p}="","",INDEX({DM}$F$7:$F$200,{p}))', XF["textl_n"])
+        hs.f(r,7, f'IF({p}="","",INDEX({DM}$G$7:$G$200,{p}))', XF["textl_n"])
+        hs.f(r,8, f'IF({p}="","",INDEX({DM}$BG$7:$BG$200,{p}))', XF["textc_n"])
+        hs.f(r,9, f'IF({p}="","",INDEX({DM}$BF$7:$BF$200,{p}))', XF["textl_n"])
     hbend=HR0+NH-1
-    fsi=esc(f'$G{HR0}="Sí"'); fnoo=esc(f'$G{HR0}="No"'); fb=esc(f'$B{HR0}<>""')
-    cf_hs=(f'<conditionalFormatting sqref="G{HR0}:G{hbend}">'
+    fsi=esc(f'$H{HR0}="Sí"'); fnoo=esc(f'$H{HR0}="No"'); fb=esc(f'$B{HR0}<>""'); fmov=esc(f'AND($D{HR0}<>"",$C{HR0}<>$D{HR0})')
+    cf_hs=(f'<conditionalFormatting sqref="H{HR0}:H{hbend}">'
             f'<cfRule type="expression" dxfId="{DX["done"]}" priority="10"><formula>{fsi}</formula></cfRule>'
             f'<cfRule type="expression" dxfId="{DX["red"]}" priority="11"><formula>{fnoo}</formula></cfRule>'
             '</conditionalFormatting>'
-            f'<conditionalFormatting sqref="B{HR0}:H{hbend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="20"><formula>{fb}</formula></cfRule></conditionalFormatting>')
+            f'<conditionalFormatting sqref="C{HR0}:D{hbend}"><cfRule type="expression" dxfId="{DX["amber"]}" priority="12"><formula>{fmov}</formula></cfRule></conditionalFormatting>'
+            f'<conditionalFormatting sqref="B{HR0}:I{hbend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="20"><formula>{fb}</formula></cfRule></conditionalFormatting>')
     svh='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
-    sheet10=render_sheet(hs, f"A1:I{hbend}", cf=cf_hs, sheetviews=svh, rowheights={1:26,2:46})
+    sheet10=render_sheet(hs, f"A1:J{hbend}", cf=cf_hs, sheetviews=svh, rowheights={1:26,2:46})
     wr("xl/worksheets/sheet10.xml", sheet10)
+
+    # ---------- sheet11: Ejecución por Tarea (FASE 4: jerarquía Tarea General > Sprint > Subtarea + semanas) ----------
+    ej=Sheet()
+    ej.cols=('<cols><col min="1" max="1" width="2.5"/><col min="2" max="2" width="34"/>'
+             '<col min="3" max="3" width="13"/><col min="4" max="4" width="42"/>'
+             '<col min="5" max="5" width="12"/><col min="6" max="6" width="13"/>'
+             '<col min="7" max="7" width="10"/><col min="8" max="8" width="17"/>'
+             '<col min="9" max="9" width="9" hidden="1"/></cols>')
+    ej.t(1,2,"EJECUCIÓN POR TAREA — Tarea General › Sprint › Subtarea", XF["title"]); ej.merge("B1","H1")
+    for c in range(3,9): ej.blank(1,c, XF["title"])
+    ej.t(2,2,"Jerarquía de ejecución: cada Tarea General con sus Sprints y subtareas, en qué SEMANA cae cada una (Actual · Siguiente · +2 · +3) y su avance calculado. Tocá el filtro (▼ en los encabezados) para aislar una Tarea, Sprint o Semana. La Tarea General y el Sprint se muestran sólo al cambiar (sangría = jerarquía).", XF["subw"]); ej.merge("B2","H2")
+    for c in range(3,9): ej.blank(2,c, XF["subw"])
+    ej.t(4,2,"Foco de semanas:", XF["section"]); ej.merge("B4","B4")
+    for i,(lbl,key) in enumerate([("Actual","Actual"),("Siguiente","Siguiente"),("+2","+2 sem"),("+3","+3 sem")]):
+        ej.f(4,3+i, f'"{lbl}: "&COUNTIF({DM}$BM$7:$BM$200,"{key}")&" subt."', XF["section"])
+    ej.blank(4,7,XF["section"]); ej.blank(4,8,XF["section"])
+    hd=["Tarea General","Sprint","Subtarea","Semana","Estado","% Avance","Responsable"]
+    for i,h in enumerate(hd): ej.t(6,2+i,h, XF["tblhdr"])
+    ER0=7; NE=60
+    for kk in range(NE):
+        r=ER0+kk
+        ej.f(r,9, f'IFERROR(MATCH(SMALL({DM}$BK$7:$BK$200,ROW()-{ER0}+1),{DM}$BK$7:$BK$200,0),"")', XF["datc"])
+        p=f"$I{r}"; pp=f"$I{r-1}"
+        ej.f(r,2, f'IF({p}="","",IF(OR(ROW()={ER0},IFERROR(INDEX({DM}$D$7:$D$200,{p})<>INDEX({DM}$D$7:$D$200,{pp}),TRUE)),INDEX({DM}$D$7:$D$200,{p}),""))', XF["textl_n"])  # Tarea General (sólo al cambiar)
+        ej.f(r,3, f'IF({p}="","",IF(OR(ROW()={ER0},IFERROR(INDEX({DM}$AZ$7:$AZ$200,{p})<>INDEX({DM}$AZ$7:$AZ$200,{pp}),TRUE),IFERROR(INDEX({DM}$D$7:$D$200,{p})<>INDEX({DM}$D$7:$D$200,{pp}),TRUE)),INDEX({DM}$AZ$7:$AZ$200,{p}),""))', XF["textc_n"])  # Sprint (al cambiar)
+        ej.f(r,4, f'IF({p}="","","   • "&INDEX({DM}$F$7:$F$200,{p}))', XF["textl_n"])   # Subtarea (sangrada)
+        ej.f(r,5, f'IF({p}="","",INDEX({DM}$BM$7:$BM$200,{p}))', XF["textc_n"])           # Semana
+        ej.f(r,6, f'IF({p}="","",INDEX({DM}$AT$7:$AT$200,{p}))', XF["textc_n"])           # Estado (Backlog)
+        ej.f(r,7, f'IF({p}="","",INDEX({DM}$I$7:$I$200,{p}))', XF["pct_n"])               # % Avance calculado
+        ej.f(r,8, f'IF({p}="","",INDEX({DM}$G$7:$G$200,{p}))', XF["textl_n"])             # Responsable
+    eend=ER0+NE-1
+    fch=esc(f'$B{ER0}<>""'); feb=esc(f'$I{ER0}<>""')
+    fact=esc(f'$E{ER0}="Actual"'); fsig=esc(f'$E{ER0}="Siguiente"'); fp2=esc(f'OR($E{ER0}="+2 sem",$E{ER0}="+3 sem")'); fpas=esc(f'$E{ER0}="Pasada"')
+    fco=esc(f'$F{ER0}="Completada"'); fpr=esc(f'OR($F{ER0}="En progreso",$F{ER0}="Casi lista")')
+    cf_ej=(
+      f'<conditionalFormatting sqref="E{ER0}:E{eend}">'
+      f'<cfRule type="expression" dxfId="{DX["done"]}" priority="10"><formula>{fact}</formula></cfRule>'
+      f'<cfRule type="expression" dxfId="{DX["blue"]}" priority="11"><formula>{fsig}</formula></cfRule>'
+      f'<cfRule type="expression" dxfId="{DX["band"]}" priority="12"><formula>{fp2}</formula></cfRule>'
+      f'<cfRule type="expression" dxfId="{DX["grey"]}" priority="13"><formula>{fpas}</formula></cfRule>'
+      '</conditionalFormatting>'
+      f'<conditionalFormatting sqref="F{ER0}:F{eend}">'
+      f'<cfRule type="expression" dxfId="{DX["done"]}" priority="14"><formula>{fco}</formula></cfRule>'
+      f'<cfRule type="expression" dxfId="{DX["amber"]}" priority="15"><formula>{fpr}</formula></cfRule>'
+      '</conditionalFormatting>'
+      f'<conditionalFormatting sqref="B{ER0}:B{eend}"><cfRule type="expression" dxfId="{DX["modhdr"]}" priority="16"><formula>{fch}</formula></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="G{ER0}:G{eend}"><cfRule type="dataBar" priority="17"><dataBar><cfvo type="num" val="0"/><cfvo type="num" val="1"/><color rgb="FF63C384"/></dataBar></cfRule></conditionalFormatting>'
+      f'<conditionalFormatting sqref="B{ER0}:H{eend}"><cfRule type="expression" dxfId="{DX["border"]}" priority="40"><formula>{feb}</formula></cfRule></conditionalFormatting>'
+    )
+    af_ej=f'<autoFilter ref="B6:H{eend}"/>'
+    sve='<sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+    sheet11=render_sheet(ej, f"A1:I{eend}", cf=cf_ej, sheetviews=sve, rowheights={1:26,2:46}, autofilter=af_ej)
+    wr("xl/worksheets/sheet11.xml", sheet11)
 
     # ---------- plumbing: workbook.xml (6 hojas nuevas) ----------
     wb=rd("xl/workbook.xml")
     new_sheets=('<sheet name="Backlog General" sheetId="20" r:id="rId16"/>'
                 '<sheet name="Sprints" sheetId="19" r:id="rId15"/>'
+                '<sheet name="Ejecución por Tarea" sheetId="22" r:id="rId18"/>'
                 '<sheet name="Historial de Sprints" sheetId="21" r:id="rId17"/>'
                 '<sheet name="Tablero" sheetId="15" r:id="rId12"/>'
                 '<sheet name="Entregas Próximas" sheetId="16" r:id="rId13"/>'
                 '<sheet name="_Datos" sheetId="18" state="hidden" r:id="rId14"/>')
     wb=wb.replace("</sheets>", new_sheets+"</sheets>",1)
+    # FASE 6 (dedup): ocultar las 2 copias redundantes del Gantt; se conserva sólo 'Proyecto Datos (OKR´s)'
+    for _nm in ("Proyecto Datos (Actual)", "Proyecto Datos"):
+        wb=re.sub(r'(<sheet name="%s" sheetId="\d+")((?:\s+state="[^"]*")?)(\s+r:id)'%re.escape(_nm),
+                  lambda m: m.group(1)+' state="hidden"'+m.group(3), wb, count=1)
     wb=wb.replace('<calcPr calcId="191029" iterate="1"/>', '<calcPr calcId="191029" iterate="1" fullCalcOnLoad="1"/>',1)
     wr("xl/workbook.xml", wb)
 
@@ -725,14 +832,15 @@ def build_all():
          '<Relationship Id="rId14" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet7.xml"/>'
          '<Relationship Id="rId15" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet8.xml"/>'
          '<Relationship Id="rId16" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet9.xml"/>'
-         '<Relationship Id="rId17" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet10.xml"/>')
+         '<Relationship Id="rId17" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet10.xml"/>'
+         '<Relationship Id="rId18" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet11.xml"/>')
     rels=rels.replace("</Relationships>", add+"</Relationships>",1)
     wr("xl/_rels/workbook.xml.rels", rels)
 
     # [Content_Types].xml: quitar calcChain, añadir sheets 5-9
     ct=rd("[Content_Types].xml")
     ct=re.sub(r'<Override PartName="/xl/calcChain.xml"[^>]*/>','',ct)
-    ov="".join(f'<Override PartName="/xl/worksheets/sheet{n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for n in (5,6,7,8,9,10))
+    ov="".join(f'<Override PartName="/xl/worksheets/sheet{n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for n in (5,6,7,8,9,10,11))
     ct=ct.replace("</Types>", ov+"</Types>",1)
     wr("[Content_Types].xml", ct)
 
